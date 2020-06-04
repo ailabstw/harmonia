@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+option go_package = ".;protos";
+
+package protos;
+
+service EdgeOperator {
+  rpc LocalTrainFinish (Msg) returns (Msg) {}
+}
+
+service EdgeApp {
+  rpc LocalTrain(LocalTrainParams) returns (Msg) {}
+}
+
+service AggregateServerOperator {
+  rpc AggregateFinish (Msg) returns (Msg) {}
+}
+
+service AggregateServerApp {
+  rpc Aggregate(AggregateParams) returns (Msg) {}
+}
+
+message Msg {
+  string message = 1;
+}
+
+message RoundPlan{
+  int32 roundCount = 2; 
+  int32 threshold = 3;
+}
+
+message LocalTrainParams {
+  string inputModelPath = 4;
+  string outputModelPath = 5;
+}
+
+message AggregateParams {
+  repeated string inputModelPaths = 6;
+  string outputModelPath = 7;
+}

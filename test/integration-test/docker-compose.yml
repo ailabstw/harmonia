@@ -1,0 +1,58 @@
+version: "3.7"
+services:
+  aggregator-app:
+    build: ./aggregator
+    volumes:
+      - ./aggregator_config.yml:/app/config.yml
+      - type: volume
+        source: aggrepos
+        target: /repos
+    networks: 
+      testnet:
+      aggregator:
+        aliases:
+          - app
+  aggregator-operator:
+    image: harmonia/operator
+    volumes:
+      - ./aggregator_config.yml:/app/config.yml
+      - type: volume
+        source: aggrepos
+        target: /repos
+    networks:
+      aggregator:
+        aliases:
+          - operator
+      testnet:
+  edge-app:
+    build: ./edge
+    volumes:
+      - ./edge_config.yml:/app/config.yml
+      - type: volume
+        source: edgerepos
+        target: /repos
+    networks:
+      edge:
+        aliases:
+          - app
+  edge-operator:
+    image: harmonia/operator
+    volumes:
+      - ./edge_config.yml:/app/config.yml
+      - type: volume
+        source: edgerepos
+        target: /repos
+    networks:
+      edge:
+        aliases:
+          - operator
+      testnet:
+networks:
+  edge:
+  aggregator:
+  testnet:
+    external: true
+    name: integration-test
+volumes:
+  aggrepos:
+  edgerepos:

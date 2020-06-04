@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aggregator-config
+data:
+  aggregator-config.yml: |
+    type: aggregator
+
+    gitUserToken: aggregator_token
+    aggregatorModelRepo:
+      gitHttpURL: http://aggregator_account@harmonia-gitea:3000/hmadmin/global-model.git
+    edgeModelRepos:
+      - gitHttpURL: http://aggregator_account@harmonia-gitea:3000/hmadmin/local-model1.git
+      - gitHttpURL: http://aggregator_account@harmonia-gitea:3000/hmadmin/local-model2.git
+    trainPlanRepo:
+      gitHttpURL: http://aggregator_account@harmonia-gitea:3000/hmadmin/train-plan.git
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: edge1-config
+data:
+  edge-config.yml: |
+    type: edge
+
+    gitUserToken: edge1_token
+    aggregatorModelRepo:
+      gitHttpURL: http://edge1_account@harmonia-gitea:3000/hmadmin/global-model.git
+    edgeModelRepo:
+      gitHttpURL: http://edge1_account@harmonia-gitea:3000/hmadmin/local-model1.git
+    trainPlanRepo:
+      gitHttpURL: http://edge1_account@harmonia-gitea:3000/hmadmin/train-plan.git
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: edge2-config
+data:
+  edge-config.yml: |
+    type: edge
+
+    gitUserToken: edge2_token
+    aggregatorModelRepo:
+      gitHttpURL: http://edge2_account@harmonia-gitea:3000/hmadmin/global-model.git
+    edgeModelRepo:
+      gitHttpURL: http://edge2_account@harmonia-gitea:3000/hmadmin/local-model2.git
+    trainPlanRepo:
+      gitHttpURL: http://edge2_account@harmonia-gitea:3000/hmadmin/train-plan.git

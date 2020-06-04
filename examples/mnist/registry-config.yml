@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitea-config
+data:
+  SSH_DOMAIN: harmonia-gitea
+  ROOT_URL: http://harmonia-gitea:3000
+  LFS_START_SERVER: "true"

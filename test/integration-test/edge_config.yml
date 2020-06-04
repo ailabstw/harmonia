@@ -1,0 +1,13 @@
+type: edge
+stewardServerURI: ":8090"
+operatorGrpcServerURI: operator:8787
+appGrpcServerURI: app:7878
+logLevel: "debug"
+
+gitUserToken: password
+aggregatorModelRepo:
+  gitHttpURL: http://harmonia_admin@test_gitea:3000/harmonia_admin/global-model.git
+edgeModelRepo:
+  gitHttpURL: http://harmonia_admin@test_gitea:3000/harmonia_admin/local-model1.git
+trainPlanRepo:
+  gitHttpURL: http://harmonia_admin@test_gitea:3000/harmonia_admin/train-plan.git
