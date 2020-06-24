@@ -24,14 +24,10 @@ message Msg {
   string message = 1;
 }
 
-message RoundPlan{
-  int32 roundCount = 2; 
-  int32 threshold = 3;
-}
-
 message LocalTrainParams {
   string inputModelPath = 4;
   string outputModelPath = 5;
+  int32 epochCount = 8;
 }
 
 message AggregateParams {

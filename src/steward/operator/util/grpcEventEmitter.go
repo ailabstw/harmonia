@@ -33,7 +33,7 @@ func EmitEvent(
 	response, err := emitEvent(ctx, client)
 	if err != nil {
 		if err == context.DeadlineExceeded {
-			zap.L().Error("Deadline exceeded")
+			zap.L().Fatal("Deadline exceeded")
 		} else {
 			zap.L().Fatal("emitEvent get error", zap.Error(err))
 		}

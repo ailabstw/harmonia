@@ -9,16 +9,20 @@ import (
 	"harmonia.com/steward/protos"
 )
 
-func sendLocalTrainMessage() {
+func sendLocalTrainMessage(epochCount int, appGrpcServerURI string, edgeModelRepoGitURL string, aggregatedModelRepoGitHttpURL string) {
 	util.EmitEvent(
-		util.Config.AppGrpcServerURI,
+		appGrpcServerURI,
 		func(conn *grpc.ClientConn) interface{} {
 			return protos.NewEdgeAppClient(conn)
 		},
 		func(ctx context.Context, client interface{}) (interface{}, error) {
+			aggregatedModelPath, _ := util.GitHttpURLToRepoFullName(aggregatedModelRepoGitHttpURL)
+			edgeModelPath, _ := util.GitHttpURLToRepoFullName(edgeModelRepoGitURL)
+
 			return client.(protos.EdgeAppClient).LocalTrain(ctx, &protos.LocalTrainParams{
-				InputModelPath: util.GitHttpURLToRepoFullName(util.Config.AggregatedModelRepo.GitHttpURL),
-				OutputModelPath: util.GitHttpURLToRepoFullName(util.Config.EdgeModelRepo.GitHttpURL),
+				InputModelPath:  aggregatedModelPath,
+				OutputModelPath: edgeModelPath,
+				EpochCount:      int32(epochCount),
 			})
 		},
 	)

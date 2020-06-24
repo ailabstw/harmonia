@@ -11,6 +11,7 @@ import (
 	"github.com/gocraft/work"
 	"go.uber.org/zap"
 
+	"harmonia.com/steward/config"
 	"harmonia.com/steward/operator"
 	"harmonia.com/steward/operator/util"
 )
@@ -68,22 +69,22 @@ func startGrpcServer(wg *sync.WaitGroup, address string, operator *operator.Oper
 }
 
 func setupGitConfig() {
-	if util.Config.AggregatedModelRepo != nil {
-		util.CloneRepository(util.Config.AggregatedModelRepo.GitHttpURL)
+	if config.Config.AggregatedModelRepo != nil {
+		util.CloneRepository(config.Config.AggregatedModelRepo.GitHttpURL)
 	}
 
-	if util.Config.EdgeModelRepo != nil {
-		util.CloneRepository(util.Config.EdgeModelRepo.GitHttpURL)
+	if config.Config.EdgeModelRepo != nil {
+		util.CloneRepository(config.Config.EdgeModelRepo.GitHttpURL)
 	}
 
-	if util.Config.EdgeModelRepos != nil {
-		for _, edgeModelRepo := range util.Config.EdgeModelRepos {
+	if config.Config.EdgeModelRepos != nil {
+		for _, edgeModelRepo := range config.Config.EdgeModelRepos {
 			util.CloneRepository(edgeModelRepo.GitHttpURL)
 		}
 	}
 
-	if util.Config.TrainPlanRepo != nil {
-		util.CloneRepository(util.Config.TrainPlanRepo.GitHttpURL)
+	if config.Config.TrainPlanRepo != nil {
+		util.CloneRepository(config.Config.TrainPlanRepo.GitHttpURL)
 	}
 
 	zap.L().Debug("git configuration setup succeeds")
@@ -91,6 +92,11 @@ func setupGitConfig() {
 
 func init() {
 	// setupEnqueuer()
+	util.GitSetup(util.GitUser{
+		"Harmonia Operator",
+		"operator@harmonia",
+		config.Config.GitUserToken,
+	})
 	setupGitConfig()
 	zap.L().Info("Init Finished")
 }
@@ -100,17 +106,35 @@ func main() {
 
 	wg := &sync.WaitGroup{}
 
-	operator := operator.NewOperator[util.Config.Type]()
+	var edgeModelRepoGitHttpURLs []string
+	var edgeModelRepoGitHttpURL string
+
+	if config.Config.EdgeModelRepos != nil {	
+		edgeModelRepoGitHttpURLs = make([]string, len(config.Config.EdgeModelRepos))
+		for i, edgeModelRepo := range config.Config.EdgeModelRepos {
+			edgeModelRepoGitHttpURLs[i] = edgeModelRepo.GitHttpURL
+		}
+	}
+	if config.Config.EdgeModelRepo != nil {
+		edgeModelRepoGitHttpURL = config.Config.EdgeModelRepo.GitHttpURL
+	}
+	operator := operator.NewOperator[config.Config.Type](
+		config.Config.AppGrpcServerURI,
+		config.Config.TrainPlanRepo.GitHttpURL,
+		config.Config.AggregatedModelRepo.GitHttpURL,
+		edgeModelRepoGitHttpURL,
+		edgeModelRepoGitHttpURLs,
+	)
 
 	wg.Add(1)
-	startGrpcServer(wg, util.Config.OperatorGrpcServerURI, operator)
+	startGrpcServer(wg, config.Config.OperatorGrpcServerURI, operator)
 
 	wg.Add(1)
-	startHTTPServer(wg, util.Config.StewardServerURI, operator)
+	startHTTPServer(wg, config.Config.StewardServerURI, operator)
 
 	zap.L().Info("steward startup",
-		zap.String("Steward Listen", util.Config.StewardServerURI),
-		zap.String("Grpc Listen", util.Config.OperatorGrpcServerURI),
+		zap.String("Steward Listen", config.Config.StewardServerURI),
+		zap.String("Grpc Listen", config.Config.OperatorGrpcServerURI),
 	)
 
 	wg.Wait()

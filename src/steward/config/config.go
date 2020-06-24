@@ -1,42 +1,20 @@
-package util
+package config
 
 import (
 	"fmt"
 	"io/ioutil"
-	"sync"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
 	"gopkg.in/yaml.v3"
+
+	"harmonia.com/steward/config/iconfig"
 )
 
-// Config : definition of the format of Config File
-type config struct {
-	Type                  string `yaml:"type"`
-	StewardServerURI      string `yaml:"stewardServerURI"`
-	OperatorGrpcServerURI string `yaml:"operatorGrpcServerURI,omitempty"`
-	AppGrpcServerURI      string `yaml:"appGrpcServerURI,omitempty"`
-	LogLevel              string `yaml:"logLevel"`
-	LogPath               string `yaml:"logPath,omitempty"`
+var Config *iconfig.IConfig
 
-	// Git Associate
-	GitUserToken        string      `yaml:"gitUserToken"`
-	AggregatedModelRepo *RepoInfo   `yaml:"aggregatorModelRepo,omitempty"`
-	EdgeModelRepos      []*RepoInfo `yaml:"edgeModelRepos,omitempty"`
-	EdgeModelRepo       *RepoInfo   `yaml:"edgeModelRepo,omitempty"`
-	TrainPlanRepo     *RepoInfo   `yaml:"trainPlanRepo,omitempty"`
-}
-
-type RepoInfo struct {
-	GitHttpURL string `yaml:"gitHttpURL"`
-}
-
-// Config : config instance
-var Config *config
-var once sync.Once
-
-func validateGeneralConfig(config *config) {
+func validateGeneralConfig(config *iconfig.IConfig) {
 	if config.StewardServerURI == "" {
 		config.StewardServerURI = "0.0.0.0:9080"
 	}
@@ -104,7 +82,7 @@ func initLogConfig(logLevelString string, logPath string) {
 	zap.L().Debug("logger init succeeded")
 }
 
-func validateAggregatorConfig(config *config) {
+func validateAggregatorConfig(config *iconfig.IConfig) {
 	if config.AggregatedModelRepo == nil {
 		zap.L().Fatal("Need `aggregatorModelRepo` Information.")
 	}
@@ -120,7 +98,7 @@ func validateAggregatorConfig(config *config) {
 	}
 }
 
-func validateEdgeConfig(config *config) {
+func validateEdgeConfig(config *iconfig.IConfig) {
 	if config.AggregatedModelRepo == nil {
 		zap.L().Fatal("Need `aggregatorModelRepo` Information.")
 	}
@@ -133,8 +111,8 @@ func validateEdgeConfig(config *config) {
 	checkIsNodeDefined("edgeModelRepo", config.EdgeModelRepo)
 }
 
-func validateConfig(_config *config) {
-	var validateConfigByType = map[string]func(*config){
+func validateConfig(_config *iconfig.IConfig) {
+	var validateConfigByType = map[string]func(*iconfig.IConfig){
 		"aggregator": validateAggregatorConfig,
 		"edge":       validateEdgeConfig,
 	}
@@ -149,7 +127,7 @@ func validateConfig(_config *config) {
 	validateConfigByType[_config.Type](_config)
 }
 
-func checkIsNodeDefined(fieldName string, node *RepoInfo) {
+func checkIsNodeDefined(fieldName string, node *iconfig.RepoInfo) {
 	if node.GitHttpURL == "" {
 		zap.L().Fatal(fmt.Sprintf("the information of `%s` node is not completed", fieldName))
 	}
@@ -158,7 +136,7 @@ func checkIsNodeDefined(fieldName string, node *RepoInfo) {
 }
 
 func init() {
-	Config = &config{}
+	Config = &iconfig.IConfig{}
 	yamlFile, err := ioutil.ReadFile("config.yml")
 	if err != nil {
 		panic(fmt.Sprintf("read config file get error: %v", err))

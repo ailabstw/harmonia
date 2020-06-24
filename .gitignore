@@ -7,3 +7,7 @@ go.sum
 *pb2_grpc.py
 .vscode
 .python-version
+src/steward/steward
+src/steward/credentialHelper.sh
+src/steward/mock
+test/integration-test/registry_data/

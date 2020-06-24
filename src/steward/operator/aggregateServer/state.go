@@ -9,6 +9,7 @@ type localTrainState struct {
 	util.State
 	trainPlan util.TrainPlan
 	roundRemain int
+	webhooks []string
 	edgeModels []string
 }
 type aggregateState struct {

@@ -33,13 +33,15 @@ We have three types of repositories in Gitea:
     ```json
     {
         "roundCount": 100,
-        "edgeCount": 2
+        "edgeCount": 2,
+        "epochCount": 1
     }
     ```
     |Field      |Description                                |
     |---        |---                                        |
     |roundCount | number of rounds in this FL training job  |
     |edgeCount  | number of edges                           |
+    |epochCount | number of epochs per round                |
 2. Aggregated Model: it stores aggregated models pushed by the Aggregator container. The final aggregated model is tagged with `inference-<commit_hash_of_train_plan>`.
 3. Edge Models: these repositories store local models pushed by each nodes seperatedly.
 
@@ -176,6 +178,7 @@ gRPC protocol:
         |---            |---        |---            |
         |inputModelPath | string    | relative path of current base model from shared storage|
         |outputModelPath| string    | relative path of local model from shared storage|
+        |epochCount     | int32     | number of epochs per round|
 
         **Outputs:**
         (None)

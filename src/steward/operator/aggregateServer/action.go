@@ -20,24 +20,32 @@ type localTrainFinishAction struct {
 	util.Action
 	gitHttpURL string
 }
+type pullFinishAction struct {
+	util.Action
+	gitHttpURL string
+}
 type aggregateFinishAction struct {
 	util.Action
 }
 
 // WebhookToAction : perform an action according to the content of the webhook
-func WebhookToAction(webhook *util.Webhook) (util.Action, error) {
-	edgeRepos := util.Config.EdgeModelRepos
-	for _, edgeRepo := range edgeRepos {
-		if util.GitHttpURLToRepoFullName(edgeRepo.GitHttpURL) == webhook.Repo.FullName {
+func WebhookToAction(webhook *util.Webhook, operator util.AbstractOperator) (util.Action, error) {
+	operatorPayload := operator.GetPayload().(Payload)
+	for _, edgeRepoGitURL := range operatorPayload.EdgeModelRepoGitHttpURLs {
+		repoFullName, err := util.GitHttpURLToRepoFullName(edgeRepoGitURL)
+		if err != nil {
+			continue
+		}
+		if repoFullName == webhook.Repo.FullName {
 			return &localTrainFinishAction{
-				gitHttpURL: edgeRepo.GitHttpURL,
+				gitHttpURL: edgeRepoGitURL,
 			}, nil
 		}
 	}
 
-	trainPlanRepo := util.Config.TrainPlanRepo
-	if util.GitHttpURLToRepoFullName(trainPlanRepo.GitHttpURL) == webhook.Repo.FullName {
-		plan, err := util.GetTrainPlanData()
+	repoFullName, _ := util.GitHttpURLToRepoFullName(operatorPayload.TrainPlanRepoGitHttpURL)
+	if repoFullName == webhook.Repo.FullName {
+		plan, err := util.GetTrainPlanData(operatorPayload.TrainPlanRepoGitHttpURL)
 		if err != nil {
 			return nil, err
 		}

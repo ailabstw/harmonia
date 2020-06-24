@@ -3,52 +3,79 @@ package edge
 import (
 	"reflect"
 
-	"harmonia.com/steward/operator/util"
-
 	"go.uber.org/zap"
+
+	"harmonia.com/steward/operator/util"
 )
 
 var StateTransit = util.StateTransit{
 	reflect.TypeOf(idleState{}): {
-		reflect.TypeOf(&trainStartAction{}): func(state *util.State, action util.Action) {
-			sendLocalTrainMessage()
+		reflect.TypeOf(&trainStartAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, func()) {
 			trainStartAction := action.(*trainStartAction)
-			*state = localTrainState{
-				roundRemain: trainStartAction.trainPlan.RoundCount}
-		},
-		reflect.TypeOf(&aggregatedModelReceivedAction{}): func(state *util.State, action util.Action) {
-			err := util.PullData(util.Config.AggregatedModelRepo.GitHttpURL)
-			if err != nil {
-				zap.L().Error("pull aggregated model error", zap.Error(err))
+			if (util.TrainPlan{}) == trainStartAction.trainPlan {
+				zap.L().Warn("train plan is empty")
 			}
-			*state = idleState{}
+			return localTrainState{
+				roundRemain: trainStartAction.trainPlan.RoundCount,
+				trainPlan:   trainStartAction.trainPlan,
+			}, func() {
+				sendLocalTrainMessage(
+					trainStartAction.trainPlan.EpochCount,
+					operator.GetPayload().(Payload).GrpcServerURI,
+					operator.GetPayload().(Payload).EdgeModelRepoGitHttpURL,
+					operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL,
+				)
+			}
+		},
+		reflect.TypeOf(&aggregatedModelReceivedAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, func()) {
+			return idleState{}, func() {
+				zap.L().Debug("pull aggregated model")
+				util.PullData(operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL)
+			}
 		},
 	},
 	reflect.TypeOf(localTrainState{}): {
-		reflect.TypeOf(&trainFinishAction{}): func(state *util.State, action util.Action) {
-			err := util.PushUpdates(util.Config.EdgeModelRepo.GitHttpURL, "")
-			if err != nil {
-				zap.L().Error("push edge model error", zap.Error(err))
+		reflect.TypeOf(&trainFinishAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, func()) {
+			pushModel := func () {
+				err := util.PushUpdates(operator.GetPayload().(Payload).EdgeModelRepoGitHttpURL, "")
+				if err != nil {
+					zap.L().Error("push edge model error", zap.Error(err))
+				}
 			}
-			localTrainState := (*state).(localTrainState)
-			if localTrainState.roundRemain - 1 == 0 {
-				*state = idleState{}
+
+			localTrainState := state.(localTrainState)
+			if localTrainState.roundRemain-1 == 0 {
+				return idleState{}, pushModel
 			} else {
-				*state = aggregateState{
-					roundRemain: localTrainState.roundRemain - 1}
+				if (util.TrainPlan{}) == localTrainState.trainPlan {
+					zap.L().Warn("train plan is empty")
+				}
+				return aggregateState{
+					roundRemain: localTrainState.roundRemain - 1,
+					trainPlan:   localTrainState.trainPlan,
+				}, pushModel
 			}
 		},
 	},
 	reflect.TypeOf(aggregateState{}): {
-		reflect.TypeOf(&aggregatedModelReceivedAction{}): func(state *util.State, action util.Action) {
-			err := util.PullData(util.Config.AggregatedModelRepo.GitHttpURL)
-			if err != nil {
-				zap.L().Error("pull aggregated model error", zap.Error(err))
+		reflect.TypeOf(&aggregatedModelReceivedAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, func()) {
+			aggregateState := state.(aggregateState)
+			if (util.TrainPlan{}) == aggregateState.trainPlan {
+				zap.L().Warn("train plan is empty")
 			}
-			sendLocalTrainMessage()
-			aggregateState := (*state).(aggregateState)
-			*state = localTrainState{
-				roundRemain: aggregateState.roundRemain}
+			return localTrainState{
+				roundRemain: aggregateState.roundRemain,
+				trainPlan:   aggregateState.trainPlan,
+			}, func() {
+				zap.L().Debug("pull aggregated model")
+				util.PullData(operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL)
+				sendLocalTrainMessage(
+					aggregateState.trainPlan.EpochCount,
+					operator.GetPayload().(Payload).GrpcServerURI,
+					operator.GetPayload().(Payload).EdgeModelRepoGitHttpURL,
+					operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL,
+				)
+			}
 		},
 	},
 }

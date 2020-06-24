@@ -27,13 +27,13 @@ type aggregatedModelReceivedAction struct {
 }
 
 // WebhookToAction : perform an action according to the content of the webhook
-func WebhookToAction(webhook *util.Webhook) (util.Action, error) {
-	if util.GitHttpURLToRepoFullName(util.Config.AggregatedModelRepo.GitHttpURL) == webhook.Repo.FullName {
+func WebhookToAction(webhook *util.Webhook, operator util.AbstractOperator) (util.Action, error) {
+	if repoName, _ := util.GitHttpURLToRepoFullName(operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL); repoName == webhook.Repo.FullName {
 		return &aggregatedModelReceivedAction{}, nil
 	}
 
-	if util.GitHttpURLToRepoFullName(util.Config.TrainPlanRepo.GitHttpURL) == webhook.Repo.FullName {
-		plan, err := util.GetTrainPlanData()
+	if repoName, _ := util.GitHttpURLToRepoFullName(operator.GetPayload().(Payload).TrainPlanRepoGitHttpURL); repoName == webhook.Repo.FullName {
+		plan, err := util.GetTrainPlanData(operator.GetPayload().(Payload).TrainPlanRepoGitHttpURL)
 		if err != nil {
 			return nil, err
 		}

@@ -19,16 +19,19 @@ def get_training_data():
         __DATA = random.sample(range(60000), 2000)
     return __DATA
 
-def train(input_model_path, output_model_path):
+def train(input_model_path, output_model_path, epochs=1):
     data = get_training_data()
     output = os.path.join("/repos", output_model_path, 'weights.tar')
+    logging.info('input path: [{}]'.format(input_model_path))
     logging.info('output path: [{}]'.format(output))
+    logging.info('epochs: {}'.format(epochs))
+
     merged_weight_path = os.path.join("/repos", input_model_path, "merged.tar")
     try:
-        mnist.train(data, output, epochs=1, resume=merged_weight_path)
+        mnist.train(data, output, epochs=epochs, resume=merged_weight_path)
     except Exception as err:
         print(err)
-    
+
     # Send finish message
     logging.info("config.GRPC_CLIENT_URI: {}".format(OPERATOR_URI))
     try:
@@ -50,7 +53,7 @@ class EdgeAppServicer(service_pb2_grpc.EdgeAppServicer):
         logging.info("LocalTrain")
 
         t = Thread(target=train,
-                   args=(request.inputModelPath, request.outputModelPath),
+                   args=(request.inputModelPath, request.outputModelPath, request.epochCount),
                    daemon=True)
         t.start()
         msg = service_pb2.Msg(message="ok")

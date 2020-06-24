@@ -7,7 +7,6 @@ RUN apt-get update -y && \
     rm -rf /var/lib/apt/lists/*
 RUN git lfs install
 WORKDIR /app
-ADD . /app
+ADD steward /app/steward
 
-RUN cd /app && go build
 ENTRYPOINT ./steward

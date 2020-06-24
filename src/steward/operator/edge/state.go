@@ -7,10 +7,12 @@ type idleState struct {
 }
 type localTrainState struct {
 	util.State
+	trainPlan   util.TrainPlan
 	roundRemain int
 }
 
 type aggregateState struct {
 	util.State
+	trainPlan   util.TrainPlan
 	roundRemain int
 }

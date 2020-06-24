@@ -10,21 +10,22 @@ import (
 
 var StateTransit = util.StateTransit {
 	reflect.TypeOf(idleState{}): {
-		reflect.TypeOf(&roundStartAction{}): func (state *util.State, action util.Action) {
+		reflect.TypeOf(&roundStartAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, func()) {
 			// TODO: send onRoundStart
 			roundStartAction := action.(*roundStartAction)
-			*state = localTrainState{
+			return localTrainState{
 				trainPlan: roundStartAction.trainPlan,
 				roundRemain: roundStartAction.trainPlan.RoundCount,
 				edgeModels: []string{},
-			}
+				webhooks: []string{},
+			}, nil
 		},
 	},
 	reflect.TypeOf(localTrainState{}): {
-		reflect.TypeOf(&localTrainFinishAction{}): func (state *util.State, action util.Action) {
+		reflect.TypeOf(&localTrainFinishAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, func()) {
 			// TODO: model verification
 			aggLocalTrainFinish := action.(*localTrainFinishAction)
-			currentLocalTrainState := (*state).(localTrainState)
+			currentLocalTrainState := state.(localTrainState)
 
 			inArray := func (arr []string, needle string) bool {
 				for _, item := range arr {
@@ -35,52 +36,75 @@ var StateTransit = util.StateTransit {
 				return false
 			}
 
-			if inArray(currentLocalTrainState.edgeModels, aggLocalTrainFinish.gitHttpURL) {
-				return
+			if inArray(currentLocalTrainState.webhooks, aggLocalTrainFinish.gitHttpURL) {
+				zap.L().Debug("this webhook is already in webhooks array")
+				return currentLocalTrainState, nil
 			}
 
-			err := util.PullData(aggLocalTrainFinish.gitHttpURL)
-
-			currentLocalTrainState = (*state).(localTrainState) // State may change after pull
-			if err != nil {
-				zap.L().Error("pull edge model error", zap.Error(err))
+			return localTrainState{
+				trainPlan:   currentLocalTrainState.trainPlan,
+				roundRemain: currentLocalTrainState.roundRemain,
+				edgeModels:  currentLocalTrainState.edgeModels,
+				webhooks:    append(currentLocalTrainState.webhooks, aggLocalTrainFinish.gitHttpURL),
+			}, func() {
+				err := util.PullData(aggLocalTrainFinish.gitHttpURL)
+				if err != nil {
+					zap.L().Fatal("pull repository error",
+						zap.String("git http url", aggLocalTrainFinish.gitHttpURL),
+						zap.Error(err))
+				} else {
+					operator.Dispatch(&pullFinishAction{gitHttpURL: aggLocalTrainFinish.gitHttpURL})
+				}
 			}
-		
+		},
+		reflect.TypeOf(&pullFinishAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, func()) {
+			aggPullFinishAction := action.(*pullFinishAction)
+			currentLocalTrainState := state.(localTrainState)
 			if len(currentLocalTrainState.edgeModels) + 1 == currentLocalTrainState.trainPlan.EdgeCount {
-				sendAggregateMessage()
-				*state = aggregateState {
-					trainPlan: currentLocalTrainState.trainPlan,
+				return aggregateState{
+					trainPlan:   currentLocalTrainState.trainPlan,
 					roundRemain: currentLocalTrainState.roundRemain,
+				}, func() {
+					sendAggregateMessage(
+						operator.GetPayload().(Payload).GrpcServerURI,
+						operator.GetPayload().(Payload).EdgeModelRepoGitHttpURLs,
+						operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL,
+					)
 				}
 			} else {
-				*state = localTrainState{
-					trainPlan: currentLocalTrainState.trainPlan,
+				return localTrainState{
+					trainPlan:   currentLocalTrainState.trainPlan,
 					roundRemain: currentLocalTrainState.roundRemain,
-					edgeModels: append(currentLocalTrainState.edgeModels, aggLocalTrainFinish.gitHttpURL),
-				}
+					edgeModels:  append(currentLocalTrainState.edgeModels, aggPullFinishAction.gitHttpURL),
+					webhooks:    currentLocalTrainState.webhooks,
+				}, nil
 			}
 		},
 	},
 	reflect.TypeOf(aggregateState{}): {
-		reflect.TypeOf(&aggregateFinishAction{}): func(state *util.State, action util.Action) {
-			aggregateState := (*state).(aggregateState)
+		reflect.TypeOf(&aggregateFinishAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, func()) {
+			aggregateState := state.(aggregateState)
+			operatorPayload := operator.GetPayload().(Payload)
 			if aggregateState.roundRemain - 1 == 0 {
-				hash := aggregateState.trainPlan.PlanHash
-				err := util.PushUpdates(util.Config.AggregatedModelRepo.GitHttpURL, "inference-" + hash)
-				if err != nil {
-					zap.L().Error("push aggregated model error", zap.Error(err))
-				}
 				// Finish a round
-				*state = idleState{}
-			} else {
-				err := util.PushUpdates(util.Config.AggregatedModelRepo.GitHttpURL, "")
-				if err != nil {
-					zap.L().Error("push aggregated model error", zap.Error(err))
+				return idleState{}, func() {
+					hash := aggregateState.trainPlan.PlanHash
+					err := util.PushUpdates(operatorPayload.AggregatedModelRepoGitHttpURL, "inference-" + hash)
+					if err != nil {
+						zap.L().Error("push aggregated model error", zap.Error(err))
+					}
 				}
-				*state = localTrainState {
-					trainPlan: aggregateState.trainPlan,
+			} else {
+				return localTrainState{
+					trainPlan:   aggregateState.trainPlan,
 					roundRemain: aggregateState.roundRemain - 1,
-					edgeModels: []string{},
+					edgeModels:  []string{},
+					webhooks:    []string{},
+				}, func() {
+					err := util.PushUpdates(operatorPayload.AggregatedModelRepoGitHttpURL, "")
+					if err != nil {
+						zap.L().Error("push aggregated model error", zap.Error(err))
+					}
 				}
 			}
 		},

@@ -70,7 +70,7 @@ sleep 1;
 docker run --rm \
     --volume ${PWD}:/setup \
     --network ${DIR} \
-    python bash -c "pip3 install requests==2.21.* && python3 /setup/setup.py set-plan '{\"roundCount\": 2, \"edgeCount\": 1, \"epochCount\": 1}'"
+    python bash -c "pip3 install requests==2.21.* && python3 /setup/setup.py set-plan '{\"roundCount\": 2, \"edgeCount\": 1, \"epochCount\": 3}'"
 
 SEC=20
 [ ! -z "$GITLAB_CI" ] && SEC=240

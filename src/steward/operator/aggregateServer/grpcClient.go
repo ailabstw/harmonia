@@ -9,21 +9,22 @@ import (
 	"harmonia.com/steward/protos"
 )
 
-func sendAggregateMessage() {
+func sendAggregateMessage(appGrpcServerURI string, EdgeModelRepoGitHttpURLs []string, aggregatedModelRepoGitHttpURL string) {
 	util.EmitEvent(
-		util.Config.AppGrpcServerURI,
+		appGrpcServerURI,
 		func(conn *grpc.ClientConn) interface{} {
 			return protos.NewAggregateServerAppClient(conn)
 		},
 		func(ctx context.Context, client interface{}) (interface{}, error) {
-			edgeModelPaths := make([]string, len(util.Config.EdgeModelRepos))
-			for i, repo := range util.Config.EdgeModelRepos {
-				edgeModelPaths[i] = util.GitHttpURLToRepoFullName(repo.GitHttpURL)
+			edgeModelPaths := make([]string, len(EdgeModelRepoGitHttpURLs))
+			for i, edgeModelRepoGitURL := range EdgeModelRepoGitHttpURLs {
+				edgeModelPaths[i], _ = util.GitHttpURLToRepoFullName(edgeModelRepoGitURL)
 			}
 
+			aggregatedModelPath, _ := util.GitHttpURLToRepoFullName(aggregatedModelRepoGitHttpURL)
 			return client.(protos.AggregateServerAppClient).Aggregate(ctx, &protos.AggregateParams{
 				InputModelPaths: edgeModelPaths,
-				OutputModelPath: util.GitHttpURLToRepoFullName(util.Config.AggregatedModelRepo.GitHttpURL),
+				OutputModelPath: aggregatedModelPath,
 			})
 		},
 	)

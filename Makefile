@@ -3,8 +3,7 @@ IMAGE_FOLDERS = \
 
 .PHONY: all test ${IMAGE_FOLDERS}
 
-all:
-	make images
+all: images
 
 images:
 	make $(IMAGE_FOLDERS)
@@ -15,6 +14,9 @@ clean:
 	for DIR in $(IMAGE_FOLDERS) $(SDK_FOLDERS); do \
 		make -C $$DIR clean; \
 	done
+
+unit-test:
+	make -C src/steward test
 
 test:
 	make -C $@
