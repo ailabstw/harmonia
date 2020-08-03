@@ -47,8 +47,8 @@ func httpRequestToWebhook(req *http.Request) (*util.Webhook, error) {
 func (operator *Operator) HttpHandleFunc() util.HttpHandleFunc {
 	defer zap.L().Sync()
 	return func(w http.ResponseWriter, req *http.Request) {
-		zap.L().Info("received request", zap.String("service", "http server"))
-		zap.L().Debug("received request", zap.String("service", "http server"), zap.String("request", fmt.Sprintf("%v", req)))
+		zap.L().Info("Receive http request")
+		zap.L().Debug(fmt.Sprintf("payload [%v]", req))
 		webhook, err := httpRequestToWebhook(req)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -56,7 +56,7 @@ func (operator *Operator) HttpHandleFunc() util.HttpHandleFunc {
 			return
 		}
 
-		zap.L().Debug("received webhook", zap.String("service", "http server"), zap.String("webhook", fmt.Sprintf("%v", webhook)))
+		zap.L().Debug(fmt.Sprintf("Receive webhook [%v]", webhook))
 		action, err := operator.webhookToAction(webhook, operator)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
@@ -64,7 +64,7 @@ func (operator *Operator) HttpHandleFunc() util.HttpHandleFunc {
 			return
 		}
 
-		zap.L().Debug("perform action", zap.String("service", "http server"), zap.String("action", fmt.Sprintf("%v", action)))
+		zap.L().Debug(fmt.Sprintf("Perform action [%v] [%v]", reflect.TypeOf(action), action))
 		go operator.Dispatch(action)
 
 		w.WriteHeader(http.StatusOK)
@@ -78,7 +78,8 @@ func (operator *Operator) GrpcServerRegister(grpcServer *grpc.Server) {
 
 func (operator *Operator) Dispatch(action util.Action) {
 	operator.stateMux.Lock()
-	defer zap.L().Sync()
+	defer operator.stateMux.Unlock()
+
 	zap.L().Debug(" --- State Before Dispatching --- ",
 		zap.String("type", fmt.Sprintf("%v", reflect.TypeOf(operator.state))),
 		zap.String("payload", fmt.Sprintf("%v", operator.state)))
@@ -86,8 +87,7 @@ func (operator *Operator) Dispatch(action util.Action) {
 	zap.L().Debug(" --- Action --- ",
 		zap.String("type", fmt.Sprintf("%v", reflect.TypeOf(action))),
 		zap.String("payload", fmt.Sprintf("%v", action)))
-
-	defer zap.L().Debug(" --- State After Dispatching --- ", zap.String("type", fmt.Sprintf("%v", reflect.TypeOf(operator.state))), zap.String("payload", fmt.Sprintf("%v", operator.state)))
+	defer zap.L().Sync()
 
 	if _, ok := operator.stateTransit[reflect.TypeOf(operator.state)][reflect.TypeOf(action)]; !ok {
 		zap.L().Error(" *** Invalid transit *** ")
@@ -99,7 +99,7 @@ func (operator *Operator) Dispatch(action util.Action) {
 	if then != nil {
 		go then()
 	}
-	operator.stateMux.Unlock()
+	zap.L().Debug(" --- State After Dispatching --- ", zap.String("type", fmt.Sprintf("%v", reflect.TypeOf(operator.state))), zap.String("payload", fmt.Sprintf("%v", operator.state)))
 }
 
 func (operator *Operator) GetPayload() interface{} {

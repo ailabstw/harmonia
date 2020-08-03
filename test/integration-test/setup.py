@@ -129,29 +129,38 @@ def init_gitea():
 
 def run_commands(cmds, cwd=None):
     for cmd in cmds:
-        p = subprocess.run(cmd, cwd=cwd)
+        p = subprocess.run(cmd, cwd=cwd, capture_output=True)
         if p.stdout:
             logger.info(p.stdout)
         if p.stderr:
             logger.info(p.stderr)
 
 
+def setup_repo(repo_name, setup=(lambda _: _)):
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        run_commands([
+            ['git', 'clone', f'http://{ADMIN}:{PASSWORD}@{GITEA_URI}/{ADMIN}/{repo_name}.git', '.']
+        ], cwd=tmpdirname)
+
+        setup(tmpdirname)
+
+        run_commands([
+            ['git', 'add', '--all'],
+            ['git', 'commit', '-m', 'setup', '--allow-empty'],
+            ['git', 'push', '-u', 'origin', 'master']
+        ], cwd=tmpdirname)
+
+        last_commit = subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=tmpdirname, capture_output=True).stdout.decode().strip()
+        return last_commit
+
+
 def setup_train_plan(plan):
-    repo_name = 'train-plan'
-    if not os.path.isdir(repo_name):
-        clone_repo(repo_name)
-    with open(os.path.join(repo_name, 'plan.json'), 'w') as file:
-        json.dump(plan, file)
-    run_commands([
-        ['git', 'add', 'plan.json'],
-        ['git', 'commit', '-m', 'update plan'],
-        ['git', 'remote', 'rm', 'origin'],
-        ['git', 'remote', 'add', 'origin', 'http://{}:{}@{}/{}/{}.git'.format(
-            ADMIN, PASSWORD, GITEA_URI, ADMIN, repo_name)],
-        ['git', 'push', '-u', 'origin', 'master']], cwd=repo_name)
+    def setup(repo_name):
+        with open(os.path.join(repo_name, 'plan.json'), 'w') as file:
+            json.dump(plan, file)
+    return setup
 
-
-if __name__ == "__main__":
+def main():
     option = sys.argv[1]
     if option == 'init':
         init_gitea()
@@ -160,9 +169,15 @@ if __name__ == "__main__":
         print(arg)
         if arg:
             try:
+                pretrained_model = setup_repo('global-model')
+
                 plan = json.loads(arg)
-                setup_train_plan(plan)
+                plan['pretrainedModel'] = pretrained_model
+                setup_repo('train-plan', setup_train_plan(plan))
             except json.JSONDecodeError as err:
                 logger.error('json decode error {}'.format(err))
     else:
         logger.warning('unknown option: {}'.format(option))
+
+if __name__ == "__main__":
+    main()

@@ -15,13 +15,32 @@ type AggregateServerOperatorServer struct {
 }
 
 // AggregateFinish : event on finishing aggregating
-func (server *AggregateServerOperatorServer) AggregateFinish(context.Context, *protos.Msg) (*protos.Msg, error) {
-	zap.L().Debug(" --- On Aggregate Finish --- ", zap.String("server", fmt.Sprintf("%v", server)))
-	server.operator.Dispatch(&aggregateFinishAction{})
+func (server *AggregateServerOperatorServer) AggregateFinish(_ context.Context, aggregateResult *protos.AggregateResult) (*protos.Empty, error) {
+	zap.L().Debug(" --- On Aggregate Finish --- ")
+	zap.L().Debug(fmt.Sprintf("Receive aggregateResult.Metadata [%v]", aggregateResult.Metadata))
+	zap.L().Debug(fmt.Sprintf("Receive aggregateResult.Metrics [%v]", aggregateResult.Metrics))
+	
+	var metadata map[string]string
+	if aggregateResult.Metadata == nil {
+		metadata = map[string]string {}
+	} else {
+		metadata = aggregateResult.Metadata
+	}
 
-	return &protos.Msg{
-		Message: "uploaded",
-	}, nil
+	var metrics map[string]float64
+	if aggregateResult.Metrics == nil {
+		metrics = map[string]float64 {}
+	} else {
+		metrics = aggregateResult.Metrics
+	}
+
+	server.operator.Dispatch(&aggregateFinishAction{
+		errCode: int(aggregateResult.Error),
+		metadata: metadata,
+		metrics: metrics,
+	})
+
+	return &protos.Empty{}, nil
 }
 
 // GrpcServerRegister : register grpc server

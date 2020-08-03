@@ -15,13 +15,33 @@ type EdgeOperatorServer struct {
 }
 
 // LocalTrainFinish : event on finishing local training
-func (server *EdgeOperatorServer) LocalTrainFinish(context.Context, *protos.Msg) (*protos.Msg, error) {
+func (server *EdgeOperatorServer) LocalTrainFinish(_ context.Context, localTrainResult *protos.LocalTrainResult) (*protos.Empty, error) {
 	zap.L().Debug(" --- On Local Train Finish --- ", zap.String("server", fmt.Sprintf("%v", server)))
-	server.operator.Dispatch(&trainFinishAction{})
+	zap.L().Debug(fmt.Sprintf("Receive localTrainResult.Metadata [%v]", localTrainResult.Metadata))
+	zap.L().Debug(fmt.Sprintf("Receive localTrainResult.Metrics [%v]", localTrainResult.Metrics))
 
-	return &protos.Msg{
-		Message: "ok",
-	}, nil
+	var metadata map[string]string
+	if localTrainResult.Metadata == nil {
+		metadata = map[string]string {}
+	} else {
+		metadata = localTrainResult.Metadata
+	}
+
+	var metrics map[string]float64
+	if localTrainResult.Metrics == nil {
+		metrics = map[string]float64 {}
+	} else {
+		metrics = localTrainResult.Metrics
+	}
+
+	server.operator.Dispatch(&trainFinishAction{
+		errCode: int(localTrainResult.Error),
+		datasetSize: int(localTrainResult.DatasetSize),
+		metadata: metadata,
+		metrics: metrics,
+	})
+
+	return &protos.Empty{}, nil
 }
 
 // GrpcServerRegister : register grpc server

@@ -1,0 +1,17 @@
+version: "3.7"
+services:
+  validator:
+    build: ./mock-operator
+    volumes:
+      - ./repos:/repos
+    depends_on:
+      - fedavg
+
+  fedavg:
+    image: harmonia/fedavg
+    environment:
+      - OPERATOR_URI=validator:1111
+      - APPLICATION_URI=0.0.0.0:2222
+      - LOGLEVEL=DEBUG
+    volumes:
+      - ./repos:/repos

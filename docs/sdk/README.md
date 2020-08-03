@@ -19,39 +19,43 @@ This README shows usage of `harmonia/operator` image. contents:
 ## System Architecture
 <div align="center"><img src="../../assets/detail_architecture.jpg" width="50%" height="50%"></div>
 
-The above figure illustrates the Harmonia configuration with two local training nodes. The numbers shown in the figure indicate the steps to finish a federated learning cycle in the release. To start a FL training, a training plan is registered in the git registry (1), and the registry notifies all the participants via webhook (2). Two local nodes are then triggered to start local training (3). Once a local node completes its local training, the resulting model (called local model) is pushed to the registry (4) and the aggregator pulls this local model (5). Once the aggregator receives local models of all the participants, it performs model aggregation (6), and the aggregated model is also pushed to the git registry (7). The aggregated model is then pulled to local nodes to start another round of local training (8). This process is repeated until a user-defined converge condition is met.
+The above figure illustrates the Harmonia workflow with two local training nodes. The numbers shown in the figure indicate the steps to finish a federated learning cycle in the release. To start a FL training, a training paremeter set is registered in the train plan repository (1), and the registry notifies all the participants via webhooks (2). Two model training nodes are then triggered to load a pretrained global model (3), and start local training with a predefined number of epochs (4). When a local train is completed, the resulting model (called a local model) is pushed to the edge model repository (5) and the aggregator pulls this local model (6). Once the aggregator receives local models of all the participants, it performs model aggregation (7) and push the aggregated model the aggregated model repository (8). The aggregated model is then pulled to local nodes to start another round of local training (9). These processes are repeated until a user-defined converge condition is met.
 
 ---
 
 ## System Compoments
 ### [Gitea](https://gitea.io/en-us/)
-Gitea is an open source git registry. Changes to repositories, e.g., models updates, trigger FL system state transitions via webhooks. 
+Gitea is an open source git registry. In Harmonia, it is used to be a public storage and communication channel.
 
 #### Repositories
 We have three types of repositories in Gitea:
 1. Training Plan: it stores the required parameters for a FL cycle. The training plan should be a json file named `plan.json` :
     ```json
     {
-        "roundCount": 100,
-        "edgeCount": 2,
-        "epochCount": 1
+        "name": "A Sample Train Task",
+        "pretrainedModel": "<git ref>",
+        "round": 100,
+        "edge": 2,
+        "EpR": 1,
     }
     ```
     |Field      |Description                                |
     |---        |---                                        |
-    |roundCount | number of rounds in this FL training job  |
-    |edgeCount  | number of edges                           |
-    |epochCount | number of epochs per round                |
+    |name       | task name                                 |
+    |round      | number of rounds in this FL training job  |
+    |edge       | number of edges                           |
+    |EpR        | number of epochs per round                |
+    |pretrainedModel | git reference to pretrained model commit in the global model repository. |
 2. Aggregated Model: it stores aggregated models pushed by the Aggregator container. The final aggregated model is tagged with `inference-<commit_hash_of_train_plan>`.
 3. Edge Models: these repositories store local models pushed by each nodes seperatedly.
 
 ### Aggregator/Edge Nodes
-An FL participant is activated as a K8S Pod, which contains an `Operator` container and `Application` container. 
+An FL participant is composed by an `Operator` container and `Application` container.
 
 ===
 
 #### Shared Storage
-This volume stores git cloned repositories and is shared `operator` and `application`.
+This volume stores git cloned repositories and is shared `Operator` and `Application`.
 
 ===
 
@@ -118,7 +122,7 @@ class AggregateServerServicer(service_pb2_grpc.AggregateServerAppServicer):
             msg = service_pb2.Msg(message="ok")
             return msg
         else:
-            # Training Code
+            # Training Your Model Here
             channel = grpc.insecure_channel(OPERATOR_URI)
             stub = service_pb2_grpc.AggregateServerOperatorStub(channel)
             msg = service_pb2.Msg(message="finish")
@@ -144,49 +148,172 @@ if __name__ == "__main__":
 <div align="center"><img src="../../assets/aggregator_state_diagram.jpg"  width="50%" height="50%"></div>
 
 gRPC protocol:
-* Message to `application`
+* Message to `Application`
     * Aggregate:  
-    This event is sent when there are `edgeCount` edges finished local train and models are stored in shared volume ready for merging.  
-        **Inputs:**
+    This message is sent when aggregator `Operator` pulls all local models to the shared volume that means it is ready for model aggregation.  
+        **Message Inputs: AggregateParams**
+        ```protobuf
+        message AggregateParams {
+            message LocalModel {
+                // relative path of the edge model from shared storage 
+                string path = 7;
 
-        |Name           |Type       |Description    |
-        |---            |---        |---            |
-        |inputModelPaths| string[]  | relative paths of edge models from shared storage|
-        |outputModelPath| string    | relative paths of aggregated model from shared storage|
+                // Training dataset size
+                int32 datasetSize = 8;
 
-        **outputs**
-        (None)
+                // Local customized validation results
+                map<string, double> metrics = 21;
+            }
+            repeated LocalModel localModels = 10;
 
-* Message from `application`
+            message AggregatedModel {
+                // Aggregated model output path
+                string path = 11;
+            }
+            AggregatedModel aggregatedModel = 12;
+        }
+        ```
+        Following is an example Aggregate input (written in json format):
+        ```json
+        {
+            "localModels": [{
+                "path": "repoOwner/edge1-model",
+                "datasetSize": 10000,
+                "metrics": {
+                    "accuracy": 0.87,
+                    "loss": 0.15
+                }
+            }, {
+                "path": "repoOwner/edge2-model",
+                "datasetSize": 15000,
+                "metrics": {
+                    "accuracy": 0.88,
+                    "loss": 0.13
+                }
+            }],
+            "aggregatedModel": [{
+                "path": "repoOwner/global-model"
+            }]
+        }
+        ```
+        **Message Outputs: Empty**
+
+* Message from `Application`
     * AggregateFinish:  
-    This action is sent without payload after user finishes merge and places the `aggregated model` into `outputModelPath` specified by `Aggregate` event.
-        **Inputs:**
-        (None)
-        **outputs**
-        (None)
+    This action is sent after finishing merge and places the `aggregated model` into `aggregatedModel.path` in `Aggregate` message.
+        **Message Inputs: AggregateResult**
+        ```protobuf
+        message AggregateResult {
+            // Aggregation error
+            enum Error {
+                SUCCESS = 0;
+                AGGREGATE_CONDITION = 1;
+                FAIL = 2;
+            }
+            Error error = 16; 
+
+            // Local customized validation results after aggregation
+            map<string, double> metrics = 19;
+        }
+        ```
+        Following is an example message (written in json format):
+        ```json
+        {
+            "error": SUCCESS,
+            "metrics": {
+                "accuracy": 0.85,
+                "loss": 0.12
+            }
+        }
+        ```
+        **Message Outputs: Empty**
 
 #### Edge
 <div align="center"><img src="../../assets/edge_state_diagram.jpg"  width="50%" height="50%"></div>
 
 gRPC protocol:
-* Message to `application`
+* Message to `Application`
+    * TrainInit:
+        Edges should initialize FL while receiving this message triggered by a train plan.
+        **Message Inputs: Empty**
+        **Message Outputs: Empty**
     * LocalTrain:
         This event is sent when receiving an `aggregated model` indicating another local train is ready to process.  
-        **Inputs:**  
+        **Message Inputs: LocalTrainParams**  
+        ```protobuf
+        message LocalTrainParams {
+            message BaseModel {
+                // relative path of the base model from shared storage
+                string path = 1;
 
-        |Name           |Type       |Description    |
-        |---            |---        |---            |
-        |inputModelPath | string    | relative path of current base model from shared storage|
-        |outputModelPath| string    | relative path of local model from shared storage|
-        |epochCount     | int32     | number of epochs per round|
+                // User customized model metadata which are string to string key value pairs 
+                map<string, string> metadata = 2;
 
-        **Outputs:**
-        (None)
+                 // Local customized validation results
+                map<string, double> metrics = 20;
+            }
+            BaseModel baseModel = 3;
 
-* Message from `application`
+            message LocalModel {
+                // relative path of resulting model from shared storage
+                string path = 4;
+            }
+            LocalModel localModel = 5;
+
+            // Epoch Per Round
+            int32 EpR = 6;
+        }
+        ```
+        Following is an example message (written in json format):
+        ```json
+        {
+            "baseModel": {
+                "path": "repoOwner/global-model",
+                "metrics": {
+                    "accuracy": 0.85,
+                    "loss": 0.12
+                }
+            },
+            "localModel": {
+                "path": "repoOwner/local-model1",
+            },
+            "EpR": 1,
+        }
+        ```
+        **Message Outputs: Empty**
+
+* Message from `Application`
     * LocalTrainFinish:
     This action is sent without payload after user finishes local train.
-        **Inputs:**
-        (None)
-        **Outputs:**
-        (None)
+        **Message Inputs: LocalTrainResult**
+        ```protobuf
+        message LocalTrainResult {
+            // Local train error
+            enum Error {
+                SUCCESS = 0;
+                FAIL = 1;
+            }
+            Error error = 13;
+
+            // Training dataset size
+            int32 datasetSize = 14;
+
+            // User customized model metadata which are string to string key value pairs
+            map<string, string> metadata = 15;
+
+            // Local customized validation results
+            map<string, double> metrics = 18;
+        }
+        ```
+        Following is an example message (written in json format):
+        ```json
+        {
+            "error": SUCCESS,
+            "datasetSize": 10000,
+            "metrics": {
+                "accuracy": 0.89,
+                "loss": 0.1
+            }
+        }
+        ```
+        **Message Outputs: Empty**

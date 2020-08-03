@@ -1,11 +1,16 @@
 # Start Traininig
 
-Push a training plan, named `plan.json`, to `Train-Plan` repository.
+Push the pretrained model to `global-model` at master branch.
+
+Push a training plan, named `plan.json`, to `train-plan` repository.
 ```json
 {
-    "roundCount": 100,
-    "edgeCount": 2
+    "name": "MNIST",
+    "round": 100,
+    "edge": 2,
+    "EpR": 1,
+    "pretrainedModel": "master"
 }
 ```
 
-There will be 100 commits in `Aggregated-Model`, `Edge1-Model` and `Edge2-Model` respectively. And a tag will be on the last commit of `Aggregated-Model`.
+There will be 100 commits in `global-model`, `local-model1` and `local-model2` respectively. And a tag will be on the last commit of `global-model`.

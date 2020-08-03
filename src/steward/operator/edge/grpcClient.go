@@ -9,20 +9,38 @@ import (
 	"harmonia.com/steward/protos"
 )
 
-func sendLocalTrainMessage(epochCount int, appGrpcServerURI string, edgeModelRepoGitURL string, aggregatedModelRepoGitHttpURL string) {
+func sendInitMessage(appGrpcServerURI string) {
 	util.EmitEvent(
 		appGrpcServerURI,
 		func(conn *grpc.ClientConn) interface{} {
 			return protos.NewEdgeAppClient(conn)
 		},
 		func(ctx context.Context, client interface{}) (interface{}, error) {
-			aggregatedModelPath, _ := util.GitHttpURLToRepoFullName(aggregatedModelRepoGitHttpURL)
+			return client.(protos.EdgeAppClient).TrainInit(ctx, &protos.Empty{})
+		},
+	)
+}
+
+func sendLocalTrainMessage(appGrpcServerURI string, epochPerRound int, baseModel baseModel, edgeModelRepoGitURL string) {
+	util.EmitEvent(
+		appGrpcServerURI,
+		func(conn *grpc.ClientConn) interface{} {
+			return protos.NewEdgeAppClient(conn)
+		},
+		func(ctx context.Context, client interface{}) (interface{}, error) {
+			aggregatedModelPath, _ := util.GitHttpURLToRepoFullName(baseModel.gitHttpURL)
 			edgeModelPath, _ := util.GitHttpURLToRepoFullName(edgeModelRepoGitURL)
 
 			return client.(protos.EdgeAppClient).LocalTrain(ctx, &protos.LocalTrainParams{
-				InputModelPath:  aggregatedModelPath,
-				OutputModelPath: edgeModelPath,
-				EpochCount:      int32(epochCount),
+				BaseModel: &protos.LocalTrainParams_BaseModel {
+					Path: aggregatedModelPath,
+					Metadata: baseModel.metadata,
+					Metrics: baseModel.metrics,
+				},
+				LocalModel: &protos.LocalTrainParams_LocalModel {
+					Path: edgeModelPath,
+				},
+				EpR: int32(epochPerRound),
 			})
 		},
 	)

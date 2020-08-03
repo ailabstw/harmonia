@@ -69,6 +69,12 @@ func startGrpcServer(wg *sync.WaitGroup, address string, operator *operator.Oper
 }
 
 func setupGitConfig() {
+	util.GitSetup(util.GitUser{
+		"Harmonia Operator",
+		"operator@harmonia",
+		config.Config.GitUserToken,
+	})
+
 	if config.Config.AggregatedModelRepo != nil {
 		util.CloneRepository(config.Config.AggregatedModelRepo.GitHttpURL)
 	}
@@ -91,12 +97,6 @@ func setupGitConfig() {
 }
 
 func init() {
-	// setupEnqueuer()
-	util.GitSetup(util.GitUser{
-		"Harmonia Operator",
-		"operator@harmonia",
-		config.Config.GitUserToken,
-	})
 	setupGitConfig()
 	zap.L().Info("Init Finished")
 }

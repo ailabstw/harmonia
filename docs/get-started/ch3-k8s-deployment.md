@@ -3,39 +3,30 @@ This chapter shows all images you should prepare for a Harmonia FL and how to de
 
 ## Build Harmonia Operator
 Simply install `harmonia/operator` image by:
-
-    `$ make all`
+```bash
+make all
+```
 
 ## Build Applications
-In this example application, we simply implement a pytorch MNIST local train and FedAvg aggragation. Two applications are python-based that implies python gRPC package should be built before images.
-
 1. Build python grpc packages in `src/protos`
     ```bash
-    $ cd src/protos
-    $ docker run --rm \
-        -v $(PWD):/protos \
-        -w /protos \
-        python bash -c "python3 -m pip install --user grpcio-tools && python3 -m grpc_tools.protoc -I . --python_out=. --grpc_python_out=. service.proto"
+    cd src/protos
+    make python_protos
     ```  
-    And copy `service_pb2.py`, `service_pb2_grpc.py` into `example/mnist/aggregator` and `example/mnist/edge`.
+    And copy `service_pb2.py`, `service_pb2_grpc.py` into `examples/edge`.
 
 
-2. Build `application` images
+2. Build `application` image
     ```bash
-    $ cd example/mnist/aggregator
-    $ docker build . --tag <registry>/mnist-aggregator
-    ```
-    ```bash
-    $ cd example/mnist/edge
-    docker build . --tag <registry>/mnist-edge
+    docker build examples/edge --tag <image_registry>/mnist-edge
     ````
 
-2. Push images to image registry
+## Deploy on K8S
+1. Push images to image registry
     ```bash
-    $ docker tag operator <registry>/harmonia/operator
-    $ docker push <registry>/harmonia/operator
-    $ docker push <registry>/mnist-aggregator
-    $ docker push <registry>/mnist-edge
+    docker tag operator <image_registry>/harmonia/operator
+    docker push <image_registry>/harmonia/operator
+    docker push <image_registry>/mnist-edge
     ```
 
 3. Create k8s configuration
@@ -64,7 +55,7 @@ In this example application, we simply implement a pytorch MNIST local train and
           containers:
           # operator container
           - name: operator
-            image: <registry>/harmonia/operator
+            image: <image_registry>/harmonia/operator
             imagePullPolicy: Always
             ports:
             - containerPort: 9080
@@ -79,7 +70,7 @@ In this example application, we simply implement a pytorch MNIST local train and
               mountPath: /repos
           # application container
           - name: application
-            image: <registry>/mnist-aggregator
+            image: <image_registry>/harmonia/fedavg
             imagePullPolicy: Always
             volumeMounts:
             # Shared storage with operator container
@@ -129,7 +120,7 @@ In this example application, we simply implement a pytorch MNIST local train and
         spec:
           containers:
           - name: operator
-            image: <registry>/harmonia/operator
+            image: <image_registry>/harmonia/operator
             imagePullPolicy: Always
             ports:
             - containerPort: 9080
@@ -141,7 +132,7 @@ In this example application, we simply implement a pytorch MNIST local train and
             - name: shared-repos
               mountPath: /repos
           - name: application
-            image: <registry>/mnist-edge
+            image: <image_registry>/mnist-edge
             imagePullPolicy: Always
             volumeMounts:
             - name: shared-repos
@@ -187,7 +178,7 @@ In this example application, we simply implement a pytorch MNIST local train and
         spec:
           containers:
           - name: operator
-            image: <registry>/harmonia/operator
+            image: <image_registry>/harmonia/operator
             imagePullPolicy: Always
             ports:
             - containerPort: 9080
@@ -199,7 +190,7 @@ In this example application, we simply implement a pytorch MNIST local train and
             - name: shared-repos
               mountPath: /repos
           - name: application
-            image: <registry>/mnist-edge
+            image: <image_registry>/mnist-edge
             imagePullPolicy: Always
             volumeMounts:
             - name: shared-repos
@@ -228,12 +219,12 @@ In this example application, we simply implement a pytorch MNIST local train and
 
 4. Apply to k8s
     ```bash
-    $ kubectl apply -f mnist-deployment.yml
+    kubectl apply -f mnist-deployment.yml
     ```
 
 5. Investigate the pod states
     ```bash
-    $ kubectl get pod
+    kubectl get pod
     ```
 
 While the `STATUS` of the pods `aggregator-xxxx`,`edge1-xxxx` and `edge2-xxxx` all become `Running`, Harmonia FL is ready and [next chapter](ch4-execute-learning.md) would is the last step to start learning processes.

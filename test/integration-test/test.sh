@@ -15,9 +15,6 @@ spin () {
     printf '\n'
 }
 
-echo "Cleaning previous outputs..."
-./test_cleanup.sh
-
 echo "Creating network"
 docker network create ${DIR}
 
@@ -48,14 +45,6 @@ docker run --rm \
     --network ${DIR} \
     python bash -c "pip3 install requests==2.21.* && python3 /setup/setup.py init"
 
-echo "Building Python Protocol"
-docker run --rm \
-    -v $PROJ_ROOT:/proj_root \
-    -w /proj_root \
-    python /proj_root/test/integration-test/protos_build.sh
-cp service_pb2_grpc.py service_pb2.py edge/
-cp service_pb2_grpc.py service_pb2.py aggregator/
-
 echo "Start Integration Test"
 docker-compose up -d --build
 
@@ -70,7 +59,7 @@ sleep 1;
 docker run --rm \
     --volume ${PWD}:/setup \
     --network ${DIR} \
-    python bash -c "pip3 install requests==2.21.* && python3 /setup/setup.py set-plan '{\"roundCount\": 2, \"edgeCount\": 1, \"epochCount\": 3}'"
+    python bash -c "pip3 install requests==2.21.* && python3 /setup/setup.py set-plan '{\"round\": 2, \"edge\": 1, \"EpR\": 3}'"
 
 SEC=20
 [ ! -z "$GITLAB_CI" ] && SEC=240

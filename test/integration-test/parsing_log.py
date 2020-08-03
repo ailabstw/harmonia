@@ -17,24 +17,24 @@ target_logs = [
     ('aggregator-operator',
      'Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/train-plan.git] [/repos/harmonia_admin/train-plan]...'),
     ('aggregator-operator', 'Init Finished'),
-    ('aggregator-operator', 'received request'),
+    ('aggregator-operator', 'Receive webhook'),
     ('aggregator-operator',
-     'Pulling Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/train-plan.git]...'),
+     'Pulling Data [/repos/harmonia_admin/train-plan]...'),
     ('aggregator-operator', 'aggregateServer.idleState'),
-    ('aggregator-operator', 'aggregateServer.roundStartAction'),
+    ('aggregator-operator', 'aggregateServer.trainStartAction'),
     ('aggregator-operator', 'aggregateServer.localTrainState'),
-    ('aggregator-operator', 'received request'),
+    ('aggregator-operator', 'Receive webhook'),
     ('aggregator-operator', 'aggregateServer.localTrainState'),
     ('aggregator-operator', 'aggregateServer.localTrainFinishAction'),
     ('aggregator-operator',
-     'Pulling Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/local-model1.git]...'),
+     'Pulling Data [/repos/harmonia_admin/local-model1]...'),
     ('aggregator-operator', 'Pull Succeed'),
     ('aggregator-operator', 'aggregateServer.aggregateState'),
     ('aggregator-operator', '--- On Aggregate Finish ---'),
     ('aggregator-operator', 'aggregateServer.aggregateState'),
     ('aggregator-operator', 'aggregateServer.aggregateFinishAction'),
     ('aggregator-operator',
-     'Pushing Data to [http://harmonia_admin@test_gitea:3000/harmonia_admin/global-model.git]...'),
+     'Pushing to [/repos/harmonia_admin/global-model] args [[--all]]...'),
     ('aggregator-operator', 'Push Succeed'),
     ('aggregator-operator', 'aggregateServer.idleState'),
     ('edge-operator',
@@ -48,25 +48,27 @@ target_logs = [
     ('edge-operator',
      'Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/train-plan.git] [/repos/harmonia_admin/train-plan]...'),
     ('edge-operator', 'Init Finished'),
-    ('edge-operator', 'received request'),
+    ('edge-operator', 'Receive webhook'),
     ('edge-operator',
-     'Pulling Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/train-plan.git]...'),
-    ('edge-operator', 'edge.idleState'),
+     'Pulling Data [/repos/harmonia_admin/train-plan]...'),
+    ('edge-operator', 'edge.idleState', 1),
+    ('edge-operator', 'edge.trainPlanAction'),
+    ('edge-operator', 'edge.trainInitState'),
     ('edge-operator', 'edge.trainStartAction'),
     ('edge-operator', 'edge.localTrainState'),
     ('edge-operator', 'edge.trainFinishAction'),
     ('edge-operator',
-     'Pushing Data to [http://harmonia_admin@test_gitea:3000/harmonia_admin/local-model1.git]...'),
+     'Pushing to [/repos/harmonia_admin/local-model1] args [[--all]]...'),
     ('edge-operator', 'Push Succeed'),
     ('edge-operator', 'edge.aggregateState'),
-    ('edge-operator', 'edge.aggregatedModelReceivedAction'),
+    ('edge-operator', 'edge.baseModelReceivedAction'),
     ('edge-operator', 'edge.localTrainState'),
     ('edge-operator', 'edge.trainFinishAction'),
-    ('edge-operator', 'edge.idleState'),
-    ('edge-operator', 'received request'),
-    ('edge-operator', 'edge.idleState'),
-    ('edge-operator', 'edge.aggregatedModelReceivedAction'),
-    ('edge-operator', 'edge.idleState'),
+    ('edge-operator', 'edge.idleState', 2),
+    ('edge-operator', 'Receive webhook'),
+    ('edge-operator', 'edge.idleState', 3),
+    ('edge-operator', 'edge.baseModelReceivedAction'),
+    ('edge-operator', 'edge.idleState', 4),
 ]
 
 
@@ -83,11 +85,13 @@ class LogContent:
             r'^(?P<name>[\w\-]+)[\s\|]+(?P<msg>.*)', line)
         if match:
             self.container_name = match.group('name')
-            json_string = match.group('msg')
-            json_obj = json.loads(json_string)
-            self.datetime = datetime.strptime(json_obj['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')
-            self.raw_msg = json_string
-
+            try:
+                json_string = match.group('msg')
+                json_obj = json.loads(json_string)
+                self.datetime = datetime.strptime(json_obj['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')
+                self.raw_msg = json_string
+            except Exception:
+                NotImplemented
 
 def parse_log_file(filename):
     log_contents = []
@@ -100,7 +104,7 @@ def parse_log_file(filename):
     return check_result(log_contents)
 
 def parse_line(line, log_contents):
-    for i, (container_name, target)in enumerate(target_logs):
+    for i, (container_name, target, *_)in enumerate(target_logs):
         if container_name in line and target in line:
             log_contents.append(LogContent(line))
             target_logs.pop(i)

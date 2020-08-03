@@ -24,16 +24,20 @@ type AbstractOperator interface {
 
 type Repository struct {
 	FullName string `json:"full_name"`
+	Branch string `json:"default_branch"`
 }
 
 type Webhook struct {
 	Repo         Repository `json:"repository"`
 	LatestCommit string     `json:"after"`
+	Ref          string     `json:"ref"`
 }
 
 type TrainPlan struct {
-	RoundCount     int `json:"roundCount"`
-	EdgeCount      int `json:"edgeCount"`
-	EpochCount     int `json:"epochCount"`
-	PlanHash       string
+	Name          string `json:"name"`
+	RoundCount     int `json:"round"`
+	EdgeCount      int `json:"edge"`
+	EpochCount     int `json:"EpR"`
+	CommitID       string
+	PretrainedModelCommitID string `json:"pretrainedModel"`
 }

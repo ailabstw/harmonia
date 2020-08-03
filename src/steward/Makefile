@@ -3,31 +3,32 @@ PROJ_ROOT=$(realpath ../..)
 all: image
 
 protos:
-	mkdir -p protos
-	docker run --rm \
-		-v $(PROJ_ROOT)/src:/src \
-		-w /src \
-		grpc/go protoc protos/service.proto --go_out=plugins=grpc:./steward/protos
+	make -C ../protos go_protos
+	cp -pvr ../protos/go_protos protos
 
-protos-v3:
-	# TODO: Update protoc-gen-go
-	# docker run --rm \
-	# 	-v $(PROJ_ROOT)/src:/src \
-	# 	-w /src \
-	# 	golang bash ./steward/protos_build.sh
-
-steward: protos
+image: protos
+	# build steward
 	docker run --rm \
 		-v $(PROJ_ROOT)/src/steward:/src \
 		-w /src \
 		golang:buster go build
-
-image: steward 
 	docker build --tag harmonia/operator .
+
+debug_image: protos
+	docker build --file Dockerfile_debug --tag harmonia/operator .
 
 clean:
 	rm -rf protos/ steward
 	docker rmi harmonia/operator || true
 
+unit_test:
+	apt update
+	apt-get install -y git-lfs file
+	git lfs install
+	go test ./... -v
+
 test: protos
-	go test ./...
+	docker run --rm \
+		-v $(PROJ_ROOT)/src/steward:/src \
+		-w /src \
+		golang:buster make unit_test

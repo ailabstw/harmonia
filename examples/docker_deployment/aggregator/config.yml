@@ -1,0 +1,12 @@
+type: aggregator
+stewardServerURI: ":9080"
+operatorGrpcServerURI: operator:8787
+appGrpcServerURI: app:7878
+gitUserToken: 1qaz_WSX
+aggregatorModelRepo:
+  gitHttpURL: http://aggregator@gitea:3000/gitea/global-model.git
+edgeModelRepos:
+  - gitHttpURL: http://aggregator@gitea:3000/gitea/local-model1.git
+  - gitHttpURL: http://aggregator@gitea:3000/gitea/local-model2.git
+trainPlanRepo:
+  gitHttpURL: http://aggregator@gitea:3000/gitea/train-plan.git

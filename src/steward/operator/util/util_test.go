@@ -34,7 +34,6 @@ func TestGitHttpURLToRepoFullName(t *testing.T) {
 		},
 	}
 
-	// TODO: here
 	for caseName, testCase := range testCases {
 		fullName, err := GitHttpURLToRepoFullName(testCase.gitURL)
 

@@ -2,6 +2,8 @@ package util
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 
 	"io/ioutil"
 	"path/filepath"
@@ -9,6 +11,46 @@ import (
 
 	"go.uber.org/zap"
 )
+
+var baseDir = "/repos/"
+var maxRetryCount = 5
+
+// TODO: rollback
+func retryOperation(operation func() error) error {
+	var err error
+	for tryCount := 0 ; tryCount < maxRetryCount ; tryCount++ {
+		if err = operation(); err != nil {
+			continue
+		}
+		return nil
+	}
+	return err
+}
+
+func TrainBranch(trainName string, trainPlanID string) string {
+	if trainName == "" {
+		trainName = "AnonymousTask"
+	}
+	return strings.Join([]string{trainName, trainPlanID}, "-")
+}
+
+func GitHttpURLToRepoFullName(gitHttpURL string) (string, error) {
+	// Modified https://regex101.com/library/BuA5xF
+	re := regexp.MustCompile(`(?P<method>https?):\/\/(?:[\w_-]+@)(?P<provider>.*?(?P<port>\:\d+)?)(?:\/|:)(?P<handle>(?P<owner>.+?)\/(?P<repo>.+?))(?:\.git|\/)?$`)
+	if !re.MatchString(gitHttpURL) {
+		return "", fmt.Errorf("Unsupported git URL: [%s]", gitHttpURL)
+	}
+	return re.ReplaceAllString(gitHttpURL, "${owner}/${repo}"), nil
+}
+
+func getRepoPath(gitHttpURL string) (string, error) {
+	repoFullName, err := GitHttpURLToRepoFullName(gitHttpURL)
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(baseDir, repoFullName), nil
+}
 
 func GetTrainPlanData(gitHttpURL string) (*TrainPlan, error) {
 	zap.L().Info("get train plan data...")
@@ -31,6 +73,131 @@ func GetTrainPlanData(gitHttpURL string) (*TrainPlan, error) {
 		zap.L().Error("unmarshal json error", zap.Error(err))
 		return nil, err
 	}
-	zap.L().Debug("", zap.String("train plan", fmt.Sprintf("%v", plan)))
+	zap.L().Debug(fmt.Sprintf("get train plan [%v]", plan))
 	return &plan, nil
+}
+
+func CloneRepository(gitHttpURL string) error {
+	repoPath, err := getRepoPath(gitHttpURL)
+	if err != nil {
+		return err
+	}
+
+	if err = retryOperation(func() error {
+		return gitCloneRepository(repoPath, gitHttpURL)
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func PullData(gitHttpURL string) error {
+	repoPath, err := getRepoPath(gitHttpURL)
+	if err != nil {
+		return err
+	}
+
+	if err = retryOperation(func() error {
+		return gitPull(repoPath)
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func PushUpdates(gitHttpURL string, tag string) error {
+	repoPath, err := getRepoPath(gitHttpURL)
+	if err != nil {
+		return err
+	}
+
+	if err = retryOperation(func() error {
+		return gitCommitAll(repoPath, "Harmonia Commit")
+	}); err != nil {
+		return err
+	}
+
+	if err = retryOperation(func() error {
+		if tag != "" {
+			return gitTag(repoPath, tag)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	if err = retryOperation(func() error {
+		return gitPushAll(repoPath)
+	}); err != nil {
+		return err
+	}
+
+	if err = retryOperation(func() error {
+		return gitPushTags(repoPath)
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func CreateGlobalModelBranch(gitHttpURL string, trainName string, trainPlanID string, pretrainedModelID string) error {
+	zap.L().Info("Initial Training Branch...")
+	
+	zap.L().Debug(fmt.Sprintf("gitHttpURL: [%v]", gitHttpURL))
+	repoPath, err := getRepoPath(gitHttpURL)
+	if err != nil {
+		return err
+	}
+
+	if err = retryOperation(func() error {
+		zap.L().Debug("fetch")
+		return gitFetch(repoPath)
+	}); err != nil {
+		return err
+	}
+
+	if err = retryOperation(func() error {
+		zap.L().Debug(fmt.Sprintf("checkout: [%v] [%v]", pretrainedModelID, TrainBranch(trainName, trainPlanID)))
+		return gitCheckout(repoPath, pretrainedModelID, TrainBranch(trainName, trainPlanID))
+	}); err != nil {
+		return err
+	}
+
+	if err = retryOperation(func() error {
+		zap.L().Debug(fmt.Sprintf("push: [%v]", []string{TrainBranch(trainName, trainPlanID)}))
+		return gitPushRefs(repoPath, []string{TrainBranch(trainName, trainPlanID)})
+	}); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func CheckoutPretrainedModel(gitHttpURL string, trainName string, trainPlanID string) error {
+	zap.L().Info("Checking out to Pretrained Model...")
+
+	zap.L().Debug(fmt.Sprintf("gitHttpURL: [%v]", gitHttpURL))
+	repoPath, err := getRepoPath(gitHttpURL)
+	if err != nil {
+		return err
+	}
+
+	if err = retryOperation(func() error {
+		zap.L().Debug("fetch")
+		return gitFetch(repoPath)
+	}); err != nil {
+		return err
+	}
+
+	if err = retryOperation(func() error {
+		zap.L().Debug(fmt.Sprintf("checkout: [%v]", TrainBranch(trainName, trainPlanID)))
+		return gitCheckout(repoPath, TrainBranch(trainName, trainPlanID), "")
+	}); err != nil {
+		return err
+	}
+
+	return nil
 }

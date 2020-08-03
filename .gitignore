@@ -8,6 +8,10 @@ go.sum
 .vscode
 .python-version
 src/steward/steward
+src/steward/protos
 src/steward/credentialHelper.sh
 src/steward/mock
+src/protos/*_protos
 test/integration-test/registry_data/
+logs.txt
+

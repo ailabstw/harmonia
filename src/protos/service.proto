@@ -5,32 +5,73 @@ option go_package = ".;protos";
 package protos;
 
 service EdgeOperator {
-  rpc LocalTrainFinish (Msg) returns (Msg) {}
+  rpc LocalTrainFinish (LocalTrainResult) returns (Empty) {}
 }
 
 service EdgeApp {
-  rpc LocalTrain(LocalTrainParams) returns (Msg) {}
+  rpc LocalTrain(LocalTrainParams) returns (Empty) {}
+  rpc TrainInit(Empty) returns (Empty) {}
 }
 
 service AggregateServerOperator {
-  rpc AggregateFinish (Msg) returns (Msg) {}
+  rpc AggregateFinish (AggregateResult) returns (Empty) {}
 }
 
 service AggregateServerApp {
-  rpc Aggregate(AggregateParams) returns (Msg) {}
+  rpc Aggregate(AggregateParams) returns (Empty) {}
 }
 
-message Msg {
-  string message = 1;
-}
+message Empty {}
 
 message LocalTrainParams {
-  string inputModelPath = 4;
-  string outputModelPath = 5;
-  int32 epochCount = 8;
+  message BaseModel {
+    string path = 1;
+    map<string, string> metadata = 2; // FUTURE:
+    map<string, double> metrics = 20;
+  }
+  BaseModel baseModel = 3;
+
+  message LocalModel {
+    string path = 4;
+  }
+  LocalModel localModel = 5;
+
+  int32 EpR = 6; // Epoch Per Round
 }
 
 message AggregateParams {
-  repeated string inputModelPaths = 6;
-  string outputModelPath = 7;
+  message LocalModel {
+    string path = 7;
+    int32 datasetSize = 8;
+    map<string, string> metadata = 9; // FUTURE:
+    map<string, double> metrics = 21;
+  }
+  repeated LocalModel localModels = 10;
+
+  message AggregatedModel {
+    string path = 11;
+  }
+  AggregatedModel aggregatedModel = 12;
+}
+
+message LocalTrainResult {
+  enum Error {
+    SUCCESS = 0;
+    FAIL = 1;
+  }
+  Error error = 13;
+  int32 datasetSize = 14;
+  map<string, string> metadata = 15; // FUTURE: 
+  map<string, double> metrics = 18;
+}
+
+message AggregateResult {
+  enum Error {
+    SUCCESS = 0;
+    AGGREGATE_CONDITION = 1; // FUTURE: Cannot aggregate due to aggregation policy
+    FAIL = 2;
+  }
+  Error error = 16;
+  map<string, string> metadata = 17; // FUTURE: 
+  map<string, double> metrics = 19;
 }

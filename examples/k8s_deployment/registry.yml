@@ -1,0 +1,50 @@
+# Gitea
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitea-config
+data:
+  INSTALL_LOCK: "true"
+  ROOT_URL: http://harmonia-gitea:3000
+  LFS_START_SERVER: "true"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gitea-deployment
+  labels:
+    app: gitea
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gitea
+  template:
+    metadata:
+      labels:
+        app: gitea
+    spec:
+      containers:
+        - name: gitea
+          image: gitea/gitea
+          ports:
+            - containerPort: 3000
+              name: gitea
+          envFrom:
+            - configMapRef:
+                name: gitea-config
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: harmonia-gitea
+spec:
+  selector:
+    app: gitea
+  ports:
+  - name: gitea-http
+    port: 3000
+    targetPort: 3000
+  type: NodePort

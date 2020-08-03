@@ -1,0 +1,30 @@
+version: "3.7"
+services:
+  app:
+    image: mnist_edge
+    environment:
+      OPERATOR_URI: operator:8787
+    volumes:
+      - type: volume
+        source: shared
+        target: /repos
+  operator:
+    image: harmonia/operator
+    volumes:
+      - ./config.yml:/app/config.yml
+      - type: volume
+        source: shared
+        target: /repos
+    networks:
+      mnist:
+        aliases:
+          - edge2
+      default:
+        aliases:
+          - operator
+networks:
+  mnist:
+    external:
+      name: mnist
+volumes:
+  shared:

@@ -7,14 +7,11 @@ import (
 )
 
 type trainPlanAction struct {
-	util.Action
-}
-type trainInvitationReplyAction struct {
-	util.Action
-}
-type roundStartAction struct {
-	util.Action
 	trainPlan util.TrainPlan
+	util.Action
+}
+type trainStartAction struct {
+	util.Action
 }
 type localTrainFinishAction struct {
 	util.Action
@@ -23,35 +20,40 @@ type localTrainFinishAction struct {
 type pullFinishAction struct {
 	util.Action
 	gitHttpURL string
+	datasetSize int
+	metadata map[string]string
+	metrics map[string]float64
 }
 type aggregateFinishAction struct {
 	util.Action
+	errCode int
+	metadata map[string]string
+	metrics map[string]float64
 }
 
 // WebhookToAction : perform an action according to the content of the webhook
 func WebhookToAction(webhook *util.Webhook, operator util.AbstractOperator) (util.Action, error) {
 	operatorPayload := operator.GetPayload().(Payload)
 	for _, edgeRepoGitURL := range operatorPayload.EdgeModelRepoGitHttpURLs {
-		repoFullName, err := util.GitHttpURLToRepoFullName(edgeRepoGitURL)
+		repoFullname, err := util.GitHttpURLToRepoFullName(edgeRepoGitURL)
 		if err != nil {
 			continue
 		}
-		if repoFullName == webhook.Repo.FullName {
+		if repoFullname == webhook.Repo.FullName {
 			return &localTrainFinishAction{
 				gitHttpURL: edgeRepoGitURL,
 			}, nil
 		}
 	}
 
-	repoFullName, _ := util.GitHttpURLToRepoFullName(operatorPayload.TrainPlanRepoGitHttpURL)
-	if repoFullName == webhook.Repo.FullName {
+	if repoFullname, _ := util.GitHttpURLToRepoFullName(operatorPayload.TrainPlanRepoGitHttpURL); repoFullname == webhook.Repo.FullName {
 		plan, err := util.GetTrainPlanData(operatorPayload.TrainPlanRepoGitHttpURL)
 		if err != nil {
 			return nil, err
 		}
 
-		plan.PlanHash = webhook.LatestCommit[0:6]
-		return &roundStartAction{
+		plan.CommitID = webhook.LatestCommit[0:6]
+		return &trainPlanAction {
 			trainPlan: *plan,
 		}, nil
 	}

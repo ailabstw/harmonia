@@ -1,5 +1,9 @@
 IMAGE_FOLDERS = \
 	src/steward \
+	src/fedavg \
+
+SDK_FOLDERS = \
+	src/protos \
 
 .PHONY: all test ${IMAGE_FOLDERS}
 
