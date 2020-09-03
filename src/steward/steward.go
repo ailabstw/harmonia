@@ -1,10 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"sync"
-
 	"net"
-	"net/http"
 
 	"google.golang.org/grpc"
 
@@ -19,23 +18,28 @@ import (
 // Make an enqueuer with a particular namespace
 var enqueuer *work.Enqueuer
 
-func startHTTPServer(wg *sync.WaitGroup, address string, operator *operator.Operator) *http.Server {
-	srv := &http.Server{Addr: address}
-	http.HandleFunc("/", operator.HttpHandleFunc())
-
+func startNotificationServer(wg *sync.WaitGroup, operator *operator.Operator) {
 	go func() {
 		defer wg.Done()
 
-		zap.L().Debug("Steward starts")
-		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-			zap.L().Fatal("Cannot start server on the address",
-				zap.String("service", "http"),
-				zap.String("address", address),
-				zap.Error(err))
-		}
-	}()
+		notificationParam := func() util.NotificationParam {
+			switch config.Config.Notification.Type {
+			case "push":
+				return util.PushNotificationParam {
+					WebhookURL: config.Config.Notification.StewardServerURI,
+				}
+			case "pull":
+				return util.PullNotificationParam {
+					PullPeriod: config.Config.Notification.PullPeriod,
+				}
+			default:
+				zap.L().Fatal(fmt.Sprintf("Invalid config.Config.Notification.Type [%v]", config.Config.Notification.Type))
+				return nil
+			}
+		}()
 
-	return srv
+		operator.RemoteNotificationRegister(notificationParam)
+	}()
 }
 
 func startGrpcServer(wg *sync.WaitGroup, address string, operator *operator.Operator) *grpc.Server {
@@ -65,6 +69,7 @@ func startGrpcServer(wg *sync.WaitGroup, address string, operator *operator.Oper
 		}
 	}()
 
+	zap.L().Info(fmt.Sprintf("Grpc Listen [%v]", config.Config.OperatorGrpcServerURI))
 	return grpcServer
 }
 
@@ -130,12 +135,9 @@ func main() {
 	startGrpcServer(wg, config.Config.OperatorGrpcServerURI, operator)
 
 	wg.Add(1)
-	startHTTPServer(wg, config.Config.StewardServerURI, operator)
+	startNotificationServer(wg, operator)
 
-	zap.L().Info("steward startup",
-		zap.String("Steward Listen", config.Config.StewardServerURI),
-		zap.String("Grpc Listen", config.Config.OperatorGrpcServerURI),
-	)
+	zap.L().Info("steward startup")
 
 	wg.Wait()
 	zap.L().Info("main: done. exiting")

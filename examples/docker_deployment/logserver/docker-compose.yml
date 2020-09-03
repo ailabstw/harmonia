@@ -1,0 +1,28 @@
+version: "3.7"
+services:
+  tensorboard:
+    image: tensorflow/tensorflow
+    entrypoint: ["tensorboard", "--logdir=/tensorboard_data", "--bind_all"]
+    ports:
+      - "6006:6006"
+    volumes:
+      - type: volume
+        source: shared
+        target: /tensorboard_data
+  operator:
+    image: harmonia/logserver
+    volumes:
+      - ./config.yml:/app/config.yml
+      - type: volume
+        source: shared
+        target: /tensorboard_data
+    networks:
+      mnist:
+        aliases:
+          - logserver
+networks:
+  mnist:
+    external: true
+    name: mnist
+volumes:
+  shared:

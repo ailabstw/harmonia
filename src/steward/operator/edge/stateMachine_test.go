@@ -14,9 +14,7 @@ import (
 
 type mockOperator struct{}
 	 
-func (*mockOperator) HttpHandleFunc() util.HttpHandleFunc {
-	return nil
-}
+func (*mockOperator) RemoteNotificationRegister(util.NotificationParam) {}
 func (*mockOperator) GrpcServerRegister(*grpc.Server) {}
 func (*mockOperator) Dispatch(util.Action) {}
 func (*mockOperator) GetPayload() interface{} {

@@ -35,8 +35,7 @@ def create_repo(repo_name):
     if not is_repo_existed():
         logger.info("Creating {} repository...".format(repo_name))
 
-        # data = '{ "name": "{}" }'.format(repo_name)
-        data = json.dumps({'name': repo_name})
+        data = json.dumps({'name': repo_name, 'auto_init': True})
 
         response = requests.post(
             'http://{}/api/v1/user/repos'.format(GITEA_URI), headers=headers, data=data, auth=HTTPBasicAuth(ADMIN, PASSWORD))
@@ -115,16 +114,23 @@ def init_gitea():
 
     create_repo('global-model')
     create_repo('local-model1')
+    create_repo('local-model2')
+    create_repo('local-model3')
     create_repo('train-plan')
 
     create_webhook(
-        'global-model', 'http://integration-test_edge-operator_1:8090/')
+        'global-model', 'http://push-edge:9080/')
+
     create_webhook(
-        'local-model1', 'http://integration-test_aggregator-operator_1:9080/')
+        'local-model1', 'http://aggregator:9080/')
+
     create_webhook(
-        'train-plan', 'http://integration-test_edge-operator_1:8090/')
+        'local-model2', 'http://aggregator:9080/')
+
     create_webhook(
-        'train-plan', 'http://integration-test_aggregator-operator_1:9080/')
+        'train-plan', 'http://push-edge:9080/')
+    create_webhook(
+        'train-plan', 'http://aggregator:9080/')
 
 
 def run_commands(cmds, cwd=None):

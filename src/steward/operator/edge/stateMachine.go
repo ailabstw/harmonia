@@ -9,9 +9,42 @@ import (
 	"harmonia.com/steward/operator/util"
 )
 
+func pullBaseModelAndLocalTrain(appURI string, baseModelURL string, localModelURL string, epochCount int) func() {
+	return func() {
+		zap.L().Debug("pull aggregated model")
+		util.PullData(baseModelURL)
+
+		repoMetadata, err := util.ReadMetadata(baseModelURL)
+		if err != nil {
+			zap.L().Fatal("Cannot read repoMetadata", zap.Error(err))
+			return
+		}
+
+		metadata := map[string]string{}
+		for key, val := range repoMetadata["metadata"].(map[string]interface{}) {
+			metadata[key] = val.(string)
+		}
+		metrics := map[string]float64{}
+		for key, val := range repoMetadata["metrics"].(map[string]interface{}) {
+			metrics[key] = val.(float64)
+		}
+
+		sendLocalTrainMessage(
+			appURI,
+			epochCount,
+			baseModel {
+				gitHttpURL: baseModelURL,
+				metadata: metadata,
+				metrics: metrics,
+			},
+			localModelURL,
+		)
+	}
+}
+
 var StateTransit = util.StateTransit{
 	reflect.TypeOf(idleState{}): {
-		reflect.TypeOf(&trainPlanAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, func()) {
+		reflect.TypeOf(&trainPlanAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, []func()) {
 			trainPlanAction := action.(*trainPlanAction)
 			if (util.TrainPlan{}) == trainPlanAction.trainPlan {
 				zap.L().Warn("train plan is empty")
@@ -21,48 +54,52 @@ var StateTransit = util.StateTransit{
 				init: false,
 				pretrainedModel: false,
 				trainPlan: trainPlanAction.trainPlan,
-			}, func() {
-				// Synchonous message
-				sendInitMessage(operator.GetPayload().(Payload).GrpcServerURI)
-				operator.Dispatch(&initMessageResponseAction{})
+			}, []func() {
+				func() {
+					// Synchonous message
+					sendInitMessage(operator.GetPayload().(Payload).GrpcServerURI)
+					operator.Dispatch(&initMessageResponseAction{})
+				},
 			}
 		},
 	},
 	reflect.TypeOf(trainInitState{}): {
-		reflect.TypeOf(&trainStartAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, func()) {
+		reflect.TypeOf(&trainStartAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, []func()) {
 			trainInitState := state.(trainInitState)
 			return localTrainState {
 				roundCount: 0,
 				trainPlan: trainInitState.trainPlan,
-			}, func() {
-				repoMetadata, err := util.ReadMetadata(operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL)
-				if err != nil {
-					zap.L().Fatal("Cannot read repoMetadata", zap.Error(err))
-					return
-				}
+			}, []func() {
+				func() {
+					repoMetadata, err := util.ReadMetadata(operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL)
+					if err != nil {
+						zap.L().Fatal("Cannot read repoMetadata", zap.Error(err))
+						return
+					}
 
-				metadata := map[string]string{}
-				for key, val := range repoMetadata["metadata"].(map[string]interface{}) {
-					metadata[key] = val.(string)
-				}
-				metrics := map[string]float64{}
-				for key, val := range repoMetadata["metrics"].(map[string]interface{}) {
-					metrics[key] = val.(float64)
-				}
+					metadata := map[string]string{}
+					for key, val := range repoMetadata["metadata"].(map[string]interface{}) {
+						metadata[key] = val.(string)
+					}
+					metrics := map[string]float64{}
+					for key, val := range repoMetadata["metrics"].(map[string]interface{}) {
+						metrics[key] = val.(float64)
+					}
 
-				sendLocalTrainMessage(
-					operator.GetPayload().(Payload).GrpcServerURI,
-					trainInitState.trainPlan.EpochCount,
-					baseModel {
-						gitHttpURL: operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL,
-						metadata: metadata,
-						metrics: metrics,
-					},
-					operator.GetPayload().(Payload).EdgeModelRepoGitHttpURL,
-				)
+					sendLocalTrainMessage(
+						operator.GetPayload().(Payload).GrpcServerURI,
+						trainInitState.trainPlan.EpochCount,
+						baseModel {
+							gitHttpURL: operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL,
+							metadata: metadata,
+							metrics: metrics,
+						},
+						operator.GetPayload().(Payload).EdgeModelRepoGitHttpURL,
+					)
+				},
 			}
 		},
-		reflect.TypeOf(&initMessageResponseAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, func()) {
+		reflect.TypeOf(&initMessageResponseAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, []func()) {
 			currentState := state.(trainInitState)
 			if !currentState.pretrainedModel {
 				return trainInitState {
@@ -71,34 +108,33 @@ var StateTransit = util.StateTransit{
 					trainPlan: currentState.trainPlan,
 				}, nil
 			} else {
-				return state, func() {
-					operator.Dispatch(&trainStartAction{})
+				return state, []func() {
+					func() {
+						operator.Dispatch(&trainStartAction{})
+					},
 				}
 			}
 		},
-		reflect.TypeOf(&baseModelReceivedAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, func()) {
+		reflect.TypeOf(&baseModelReceivedAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, []func()) {
 			trainInitState := state.(trainInitState)
 			baseModelReceivedAction := action.(*baseModelReceivedAction)
 
-			return state, func() {
-				zap.L().Debug(fmt.Sprintf("Webhook ref [%s]. Expect [%s]",
-					baseModelReceivedAction.ref,
-					fmt.Sprintf("refs/heads/%s", util.TrainBranch(trainInitState.trainPlan.Name, trainInitState.trainPlan.CommitID)),
-				))
+			if baseModelReceivedAction.ref != fmt.Sprintf("refs/heads/%s", util.TrainBranch(trainInitState.trainPlan.Name, trainInitState.trainPlan.CommitID)) {
+				return state, nil
+			}
 
-				if baseModelReceivedAction.ref != fmt.Sprintf("refs/heads/%s", util.TrainBranch(trainInitState.trainPlan.Name, trainInitState.trainPlan.CommitID)) {
-					return 
-				}
-
-				util.CheckoutPretrainedModel(
-					operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL,
-					trainInitState.trainPlan.Name,
-					trainInitState.trainPlan.CommitID,
-				)
-				operator.Dispatch(&pretrainedModelReadyAction{})
+			return state, []func() {
+				func() {
+					util.CheckoutPretrainedModel(
+						operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL,
+						trainInitState.trainPlan.Name,
+						trainInitState.trainPlan.CommitID,
+					)
+					operator.Dispatch(&pretrainedModelReadyAction{})
+				},
 			}
 		},
-		reflect.TypeOf(&pretrainedModelReadyAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, func()) {
+		reflect.TypeOf(&pretrainedModelReadyAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, []func()) {
 			currentState := state.(trainInitState)
 			if !currentState.init {
 				return trainInitState {
@@ -107,14 +143,16 @@ var StateTransit = util.StateTransit{
 					trainPlan: currentState.trainPlan,
 				}, nil
 			} else {
-				return state, func() {
-					operator.Dispatch(&trainStartAction{})
+				return state, []func() {
+					func() {
+						operator.Dispatch(&trainStartAction{})
+					},
 				}
 			}
 		},
 	},
 	reflect.TypeOf(localTrainState{}): {
-		reflect.TypeOf(&trainFinishAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, func()) {
+		reflect.TypeOf(&trainFinishAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, []func()) {
 			localTrainState := state.(localTrainState)
 			trainFinishAction := action.(*trainFinishAction)
 
@@ -141,7 +179,9 @@ var StateTransit = util.StateTransit{
 			}
 
 			if localTrainState.roundCount + 1 == localTrainState.trainPlan.RoundCount {
-				return idleState{}, pushModel
+				return idleState{}, []func() {
+					pushModel,
+				}
 			} else {
 				if (util.TrainPlan{}) == localTrainState.trainPlan {
 					zap.L().Warn("train plan is empty")
@@ -149,48 +189,99 @@ var StateTransit = util.StateTransit{
 				return aggregateState{
 					roundCount: localTrainState.roundCount + 1,
 					trainPlan:   localTrainState.trainPlan,
-				}, pushModel
+				}, []func() {
+					pushModel,
+				}
+			}
+		},
+		reflect.TypeOf(&baseModelReceivedAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, []func()) {
+			localTrainState := state.(localTrainState)
+			baseModelReceivedAction := action.(*baseModelReceivedAction)
+
+			if baseModelReceivedAction.ref != fmt.Sprintf("refs/heads/%s", util.TrainBranch(localTrainState.trainPlan.Name, localTrainState.trainPlan.CommitID)) {
+				return state, nil
+			}
+
+			return localTrainInterruptedState {
+				roundCount: localTrainState.roundCount,
+				trainPlan: localTrainState.trainPlan,
+			}, []func() {
+				func() {
+					sendTrainInterruptMessage(
+						operator.GetPayload().(Payload).GrpcServerURI,
+					)
+					operator.Dispatch(&trainCleanupAction{
+						roundCount: localTrainState.roundCount,
+					})
+				},
+			}
+		},
+	},
+	reflect.TypeOf(localTrainInterruptedState{}): {
+		reflect.TypeOf(&trainCleanupAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, []func()) {
+			currentState := state.(localTrainInterruptedState)
+			trainCleanupAction := action.(*trainCleanupAction)
+		
+			if currentState.roundCount != trainCleanupAction.roundCount {
+				return currentState, nil
+			}
+		
+			return localTrainState {
+				roundCount: currentState.roundCount + 1,
+				trainPlan: currentState.trainPlan,
+			}, []func() {
+				pullBaseModelAndLocalTrain(
+					operator.GetPayload().(Payload).GrpcServerURI,
+					operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL,
+					operator.GetPayload().(Payload).EdgeModelRepoGitHttpURL,
+					currentState.trainPlan.EpochCount,
+				),
+			}
+		},
+		reflect.TypeOf(&baseModelReceivedAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, []func()) {
+			currentState := state.(localTrainInterruptedState)
+			baseModelReceivedAction := action.(*baseModelReceivedAction)
+
+			if baseModelReceivedAction.ref != fmt.Sprintf("refs/heads/%s", util.TrainBranch(currentState.trainPlan.Name, currentState.trainPlan.CommitID)) {
+				return state, nil
+			}
+
+			return localTrainInterruptedState {
+				roundCount: currentState.roundCount + 1,
+				trainPlan: currentState.trainPlan,
+			}, []func() {
+				func() {
+					sendTrainInterruptMessage(
+						operator.GetPayload().(Payload).GrpcServerURI,
+					)
+					operator.Dispatch(&trainCleanupAction{
+						roundCount: currentState.roundCount + 1,
+					})
+				},
 			}
 		},
 	},
 	reflect.TypeOf(aggregateState{}): {
-		reflect.TypeOf(&baseModelReceivedAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, func()) {
+		reflect.TypeOf(&baseModelReceivedAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, []func()) {
 			aggregateState := state.(aggregateState)
+			baseModelReceivedAction := action.(*baseModelReceivedAction)
+
 			if (util.TrainPlan{}) == aggregateState.trainPlan {
 				zap.L().Warn("train plan is empty")
 			}
+			if baseModelReceivedAction.ref != fmt.Sprintf("refs/heads/%s", util.TrainBranch(aggregateState.trainPlan.Name, aggregateState.trainPlan.CommitID)) {
+				return state, nil
+			}
 			return localTrainState{
 				roundCount: aggregateState.roundCount,
-				trainPlan:   aggregateState.trainPlan,
-			}, func() {
-				zap.L().Debug("pull aggregated model")
-				util.PullData(operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL)
-
-				repoMetadata, err := util.ReadMetadata(operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL)
-				if err != nil {
-					zap.L().Fatal("Cannot read repoMetadata", zap.Error(err))
-					return
-				}
-
-				metadata := map[string]string{}
-				for key, val := range repoMetadata["metadata"].(map[string]interface{}) {
-					metadata[key] = val.(string)
-				}
-				metrics := map[string]float64{}
-				for key, val := range repoMetadata["metrics"].(map[string]interface{}) {
-					metrics[key] = val.(float64)
-				}
-
-				sendLocalTrainMessage(
+				trainPlan: aggregateState.trainPlan,
+			}, []func() {
+				pullBaseModelAndLocalTrain(
 					operator.GetPayload().(Payload).GrpcServerURI,
-					aggregateState.trainPlan.EpochCount,
-					baseModel {
-						gitHttpURL: operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL,
-						metadata: metadata,
-						metrics: metrics,
-					},
+					operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL,
 					operator.GetPayload().(Payload).EdgeModelRepoGitHttpURL,
-				)
+					aggregateState.trainPlan.EpochCount,
+				),
 			}
 		},
 	},

@@ -59,9 +59,9 @@ sleep 1;
 docker run --rm \
     --volume ${PWD}:/setup \
     --network ${DIR} \
-    python bash -c "pip3 install requests==2.21.* && python3 /setup/setup.py set-plan '{\"round\": 2, \"edge\": 1, \"EpR\": 3}'"
+    python bash -c "pip3 install requests==2.21.* && python3 /setup/setup.py set-plan '{\"round\": 2, \"edge\": 3, \"EpR\": 3, \"timeout\": 5}'"
 
-SEC=20
+SEC=30
 [ ! -z "$GITLAB_CI" ] && SEC=240
 echo "sleeping ${SEC} seconds to wait the harmonia system finished one round"
 spin $SEC

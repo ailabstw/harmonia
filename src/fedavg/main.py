@@ -14,9 +14,31 @@ LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
 REPO_ROOT = os.environ.get('REPO_ROOT', '/repos')
 MODEL_FILENAME = os.environ.get('MODEL_FILENAME', 'weights.tar')
 
+AGGREGATE_SUCCESS = 0
+AGGREGATE_CONDITION = 1
+AGGREGATE_FAIL = 2
+
 logging.basicConfig(level=LOG_LEVEL)
 
+def send_result(err):
+    logging.info("config.GRPC_CLIENT_URI: [%s]", OPERATOR_URI)
+    try:
+        channel = grpc.insecure_channel(OPERATOR_URI)
+        stub = service_pb2_grpc.AggregateServerOperatorStub(channel)
+        res = service_pb2.AggregateResult(error=err,)
+        response = stub.AggregateFinish(res)
+    except grpc.RpcError as rpc_error:
+        logging.error("grpc error: [%s]", rpc_error)
+    except Exception as err:
+        logging.error("got error: [%s]", err)
+
+    logging.debug("sending grpc message succeeds, response: [%s]", response)
+
 def aggregate(local_models, aggregated_model):
+    if len(local_models) == 0:
+        send_result(AGGREGATE_FAIL)
+        return
+
     models = []
     for local_model in local_models:
         path = os.path.join(REPO_ROOT, local_model.path, MODEL_FILENAME)
@@ -28,19 +50,7 @@ def aggregate(local_models, aggregated_model):
     logging.debug("output_path: [%s]", output_path)
     merge.merge(models, output_path)
 
-    # Send finish message
-    logging.info("config.GRPC_CLIENT_URI: [%s]", OPERATOR_URI)
-    try:
-        channel = grpc.insecure_channel(OPERATOR_URI)
-        stub = service_pb2_grpc.AggregateServerOperatorStub(channel)
-        res = service_pb2.AggregateResult(error=0,)
-        response = stub.AggregateFinish(res)
-    except grpc.RpcError as rpc_error:
-        logging.error("grpc error: [%s]", rpc_error)
-    except Exception as err:
-        logging.error("got error: [%s]", err)
-
-    logging.debug("sending grpc message succeeds, response: [%s]", response)
+    send_result(AGGREGATE_SUCCESS)
 
 class AggregateServerServicer(service_pb2_grpc.AggregateServerAppServicer):
     def Aggregate(self, request, context):

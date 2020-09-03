@@ -86,6 +86,10 @@ func (suite *AggregateServerOperatorTestSuite) TestDispatch() {
 	dummyWebhookToAction := func(_ *util.Webhook, _ util.AbstractOperator) (util.Action, error) {
 		return nil, nil
 	}
+	dummyPullRepoNotification := func(_ util.AbstractOperator) ([]util.Action, error) {
+		return nil, nil
+
+	}
 	dummyGrpcServerRegister := func(_ *grpc.Server, _ util.AbstractOperator) {
 		return
 	}
@@ -107,13 +111,15 @@ func (suite *AggregateServerOperatorTestSuite) TestDispatch() {
 			action{},
 			util.StateTransit {
 				reflect.TypeOf(fromState{}): {
-					reflect.TypeOf(action{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, func()) {
-						return toState{}, func() {
-							_ = <-testChan
-							operator.(*Operator).payload = struct {
-								foo string
-							} {"bar"}
-							testChan <- "finish"
+					reflect.TypeOf(action{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, []func()) {
+						return toState{}, []func() {
+							func() {
+								_ = <-testChan
+								operator.(*Operator).payload = struct {
+									foo string
+								} {"bar"}
+								testChan <- "finish"
+							},
 						}
 					},
 				},
@@ -151,6 +157,7 @@ func (suite *AggregateServerOperatorTestSuite) TestDispatch() {
 			testCase.fromState,
 			testCase.stateTransit,
 			dummyWebhookToAction,
+			dummyPullRepoNotification,
 			dummyGrpcServerRegister,
 			nil,
 			&sync.Mutex{},

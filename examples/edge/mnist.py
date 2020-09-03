@@ -47,6 +47,13 @@ def __test(model, device, test_loader):
             test_loss, correct, len(test_loader.dataset),
             100. * correct / len(test_loader.dataset)))
 
+    metrics = {
+        'loss': test_loss,
+        'accuracy:': (100. * correct / len(test_loader.dataset))
+    }
+    return metrics
+
+
 def train(data_slice: list, output: str, batch_size=64, test_batch_size=1000,
           epochs=1, lr=1.0, gamma=0.7, no_cuda=False, seed=1,
           log_interval=10, resume=''):
@@ -100,8 +107,7 @@ def train(data_slice: list, output: str, batch_size=64, test_batch_size=1000,
     optimizer = optim.Adadelta(model.parameters(), lr=lr)
 
     try:
-        resume = torch.load(resume)
-        model.load_state_dict(resume['model_state_dict'])
+        model.load_state_dict(torch.load(resume))
         if 'optimizaer_state_dict' in resume:
             optimizer.load_state_dict(resume['optimizer_state_dict'])
         if 'epoch' in resume:
@@ -111,17 +117,19 @@ def train(data_slice: list, output: str, batch_size=64, test_batch_size=1000,
             batch_size=batch_size,
             shuffle=True,
             **kwargs)
-    except Exception:
-        logging.info("[MNIST] Empty Base Model")
+    except Exception as err:
+        logging.info("Load resume fails [%s]", err)
 
     logging.info("[MNIST] Training...")
     model.train()
 
     scheduler = StepLR(optimizer, step_size=1, gamma=gamma)
+    metrics = {}
     for epoch in range(1, epochs + 1):
         __train(model, device, train_loader, optimizer, epoch, log_interval)
-        __test(model, device, test_loader)
+        metrics = __test(model, device, test_loader)
         scheduler.step()
 
     logging.info("[MNIST] Save Weights... [{}]".format(output))
     torch.save(model.state_dict(), output)
+    return metrics

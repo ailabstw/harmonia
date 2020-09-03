@@ -1,5 +1,7 @@
 type: aggregator
-stewardServerURI: ":9080"
+notification:
+  type: push
+  stewardServerURI: ":9080"
 operatorGrpcServerURI: operator:8787
 appGrpcServerURI: app:7878
 gitUserToken: 1qaz_WSX

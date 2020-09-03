@@ -37,6 +37,7 @@ We have three types of repositories in Gitea:
         "round": 100,
         "edge": 2,
         "EpR": 1,
+        "timeout": 86400,
     }
     ```
     |Field      |Description                                |
@@ -45,6 +46,7 @@ We have three types of repositories in Gitea:
     |round      | number of rounds in this FL training job  |
     |edge       | number of edges                           |
     |EpR        | number of epochs per round                |
+    |timeout    | local train timeout (second)              |
     |pretrainedModel | git reference to pretrained model commit in the global model repository. |
 2. Aggregated Model: it stores aggregated models pushed by the Aggregator container. The final aggregated model is tagged with `inference-<commit_hash_of_train_plan>`.
 3. Edge Models: these repositories store local models pushed by each nodes seperatedly.
@@ -69,6 +71,8 @@ Harmonia operator, an instance of `harmonia/operator` image,  is responsible for
 `Operator` can be configured with `/app/config.yml`. Each field in the configuration file is described below:
 ```yaml
 type: aggregator
+notification:
+    type: push
 gitUserToken: <aggregator_token>
 aggregatorModelRepo:
     gitHttpURL: http://<aggregator_account>@<gitea_URL>/<global_model_repo>.git
@@ -84,7 +88,7 @@ trainPlanRepo:
 |type| one of `aggregator` or `edge`|Required|
 |logLevel| one of `debug`, `info`, `warn`, `error`, `panic`, `fatal`|Optional: default `info`|
 |logPath| absolute path to log |Optional: default `""`, console log only|
-|stewardServerURI| listens gitea webhooks on `hostname:port` |Optional: default `0.0.0.0:9080`|
+|notification| `NotificationDesp` |Required|
 |operatorGrpcServerURI| listens application gRPC message on `hostname:port` |Optional: default `localhost:8787`|
 |appGrpcServerURI| location that application gRPC server listens to.  |Optional: default `localhost:7878`|
 |gitUserToken| the token of Gitea user |Required|
@@ -97,6 +101,10 @@ trainPlanRepo:
 |---        |---        |
 |RepositoryDesp|An repository medata contains `gitHttpURL`|
 |gitHttpURL|format: `http://<username>@<gitea_URL>/<repo>.git`|
+|NotificationDesp|push or pull notification metadata|
+|NotificationDesp.type|`"push"` or `"pull"`|
+|NotificationDesp.stewardServerURI| listens gitea webhooks on `hostname:port` |Optional: default `0.0.0.0:9080`|
+|NotificationDesp.pullPeriod| Period between pull (in seconds)  |Optional: default `10`|
 
 ===
 
@@ -280,6 +288,10 @@ gRPC protocol:
             "EpR": 1,
         }
         ```
+        **Message Outputs: Empty**
+    * TrainInterrupt:
+        An edge should stop and cleanup current local train due to timeout. After response this message, another `LocalTrain` message would be sent to the edge successively.
+        **Message Inputs: Empty**
         **Message Outputs: Empty**
 
 * Message from `Application`

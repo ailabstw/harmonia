@@ -27,11 +27,23 @@ func retryOperation(operation func() error) error {
 	return err
 }
 
+func trainNameFormat(trainName string) string {
+	re := regexp.MustCompile(`[./?@*\[\]{}\\]+`)
+	return re.ReplaceAllString(trainName, "_")
+}
+
+func InferenceTag(trainName string, trainPlanID string) string {
+	if trainName == "" {
+		return strings.Join([]string{"inference", trainPlanID}, "-")
+	}
+	return strings.Join([]string{"inference", trainNameFormat(trainName), trainPlanID}, "-")
+}
+
 func TrainBranch(trainName string, trainPlanID string) string {
 	if trainName == "" {
-		trainName = "AnonymousTask"
+		return strings.Join([]string{"AnonymousTask", trainPlanID}, "-")
 	}
-	return strings.Join([]string{trainName, trainPlanID}, "-")
+	return strings.Join([]string{trainNameFormat(trainName), trainPlanID}, "-")
 }
 
 func GitHttpURLToRepoFullName(gitHttpURL string) (string, error) {
@@ -61,7 +73,7 @@ func GetTrainPlanData(gitHttpURL string) (*TrainPlan, error) {
 	}
 	data, err := ioutil.ReadFile(
 		// TODO: get filename of plan by argument ?
-		filepath.Join(baseDir + repoFullName, "plan.json"),
+		filepath.Join(baseDir, repoFullName, "plan.json"),
 	)
 	if err != nil {
 		zap.L().Error("cannot read file", zap.Error(err))
@@ -74,6 +86,8 @@ func GetTrainPlanData(gitHttpURL string) (*TrainPlan, error) {
 		return nil, err
 	}
 	zap.L().Debug(fmt.Sprintf("get train plan [%v]", plan))
+	plan.CommitID, _ = execGitCommand([]string{"rev-parse", "--short", "HEAD"}, filepath.Join(baseDir, repoFullName))
+	plan.CommitID = strings.TrimSpace(plan.CommitID)
 	return &plan, nil
 }
 
@@ -160,8 +174,24 @@ func CreateGlobalModelBranch(gitHttpURL string, trainName string, trainPlanID st
 	}
 
 	if err = retryOperation(func() error {
-		zap.L().Debug(fmt.Sprintf("checkout: [%v] [%v]", pretrainedModelID, TrainBranch(trainName, trainPlanID)))
-		return gitCheckout(repoPath, pretrainedModelID, TrainBranch(trainName, trainPlanID))
+		_, err := execGitCommand([]string{"checkout", "--detach"}, repoPath)
+		return err
+	}); err != nil {
+		return err
+	}
+
+	removeAllLocalBranch(repoPath)
+
+	if err = retryOperation(func() error {
+		zap.L().Debug(fmt.Sprintf("checkout: [%v]", pretrainedModelID))
+		return gitCheckout(repoPath, pretrainedModelID, "")
+	}); err != nil {
+		return err
+	}
+
+	if err = retryOperation(func() error {
+		zap.L().Debug(fmt.Sprintf("checkout -b [%v]", TrainBranch(trainName, trainPlanID)))
+		return gitCheckout(repoPath, "", TrainBranch(trainName, trainPlanID))
 	}); err != nil {
 		return err
 	}
@@ -200,4 +230,12 @@ func CheckoutPretrainedModel(gitHttpURL string, trainName string, trainPlanID st
 	}
 
 	return nil
+}
+
+func CheckUpdatedBranches(gitHttpURL string) (map[string]struct{}, error) {
+	repoPath, err := getRepoPath(gitHttpURL)
+	if err != nil {
+		return nil, err
+	}
+	return gitCheckUpdatedBranches(repoPath)
 }

@@ -3,6 +3,7 @@ package util
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -22,11 +23,11 @@ var credentialHelperScript = "/tmp/credentialHelper.sh"
 
 func GitSetup(gitUser GitUser) {
 	createCredHelperScript(gitUser.Token)
-	out, err := execCommand("git", []string{"config", "--global", "user.email", gitUser.Email}, ".", []string{})
+	out, err := execGitCommand([]string{"config", "--global", "user.email", gitUser.Email}, ".")
 	if err != nil {
 		zap.L().Warn("git config setup error", zap.String("output", out), zap.Error(err))
 	}
-	out, err = execCommand("git", []string{"config", "--global", "user.name", gitUser.Name}, ".", []string{})
+	out, err = execGitCommand([]string{"config", "--global", "user.name", gitUser.Name}, ".")
 	if err != nil {
 		zap.L().Warn("git config setup error", zap.String("output", out), zap.Error(err))
 	}
@@ -36,11 +37,9 @@ func createCredHelperScript(userToken string) {
 	txt := []byte("printf '%s\\n' " + userToken)
 	err := ioutil.WriteFile(credentialHelperScript, txt, 0710)
 	if err != nil {
-		fmt.Println("create credential helper error", zap.Error(err))
 		zap.L().Error("create credential helper error", zap.Error(err))
 	}
 	zap.L().Debug("create credential helper script complete")
-	fmt.Println("create credential helper script complete")
 }
 
 func gitCloneRepository(repoPath string, gitURL string) error {
@@ -86,11 +85,11 @@ func gitPull(repoPath string) error {
 
 func gitCommitAll(repoPath string, message string) error {
 	lfsCheck(repoPath)
-	_, err := execCommand("git", []string{"add", "--all"}, repoPath, []string{})
+	_, err := execGitCommand([]string{"add", "--all"}, repoPath)
 	if err != nil {
 		return err
 	}
-	_, err = execCommand("git", []string{"commit", "-a", "-m", message, "--allow-empty"}, repoPath, []string{})
+	_, err = execGitCommand([]string{"commit", "-a", "-m", message, "--allow-empty"}, repoPath)
 	if err != nil {
 		return err
 	}
@@ -98,7 +97,7 @@ func gitCommitAll(repoPath string, message string) error {
 }
 
 func gitTag(repoPath string, tagName string) error {
-	_, err := execCommand("git", []string{"tag", tagName}, repoPath, []string{})
+	_, err := execGitCommand([]string{"tag", tagName}, repoPath)
 	return err
 }
 
@@ -130,21 +129,25 @@ func gitPushTags(repoPath string) error {
 }
 
 func gitBranch(repoPath string, branchName string) error {
-	_, err := execCommand("git", []string{"branch", branchName}, repoPath, []string{})
+	_, err := execGitCommand([]string{"branch", branchName}, repoPath)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func gitCheckout(repoPath string, commit string, branch string) error {
-	args := []string{"checkout", commit}
+func gitCheckout(repoPath string, ref string, branch string) error {
+	args := []string{"checkout"}
+
+	if ref != "" {
+		args = append(args, ref)
+	}
 
 	if branch != "" {
 		args = append(args, "-b", branch)
 	}
 
-	_, err := execCommand("git", args, repoPath, []string{})
+	_, err := execGitCommand(args, repoPath)
 	if err != nil {
 		return err
 	}
@@ -193,7 +196,7 @@ func isTextFile(path string) bool {
 
 func lfsTrackFile(filename string, repoPath string) error {
 	zap.L().Info("git lfs track file", zap.String("file", filename))
-	_, err := execCommand("git", []string{"lfs", "track", filename}, repoPath, []string{})
+	_, err := execGitCommand([]string{"lfs", "track", filename}, repoPath)
 	if err != nil {
 		return err
 	}
@@ -230,4 +233,90 @@ func execCommand(name string, args []string, path string, env []string) (string,
 	}
 
 	return stdout.String(), nil
+}
+
+func execGitCommand(args []string, cwd string) (string, error) {
+	return execCommand("git", args, cwd, []string{})
+}
+
+func removeAllLocalBranch(cwd string) (string, error) {
+	// git for-each-ref --format '%(refname:short)' refs/heads | xargs git branch -D
+	cmd1 := exec.Command("git", "for-each-ref", "--format", "%(refname:short)", "refs/heads")
+	cmd2 := exec.Command("xargs", "git", "branch", "-D")
+
+	if cwd != "" {
+		cmd1.Dir = cwd
+		cmd2.Dir = cwd
+	}
+
+	read, write := io.Pipe() 
+	cmd1.Stdout = write
+	cmd2.Stdin = read
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd2.Stdout = &stdout
+	cmd2.Stderr = &stderr
+
+	cmd1.Start()
+	cmd2.Start()
+	cmd1.Wait()
+	write.Close()
+	cmd2.Wait()
+
+	return stdout.String(), nil
+}
+
+func gitCheckUpdatedBranches(repoPath string) (map[string]struct{}, error) {
+	if err := retryOperation(func() error {
+		zap.L().Debug("fetch")
+		return gitFetch(repoPath)
+	}); err != nil {
+		return nil, err
+	}
+
+	branchOutputToSet := func (output string, prefix string) map[string]string {
+		branchSet := map[string]string{}
+		for _, branch := range(strings.Split(output, "\n")) {
+			tmp := strings.Split(branch, " ")
+			if len(tmp) != 2 {
+				continue
+			}
+			if tmp[0][len(prefix):] == "HEAD" {
+				continue
+			}
+			branchSet[tmp[0][len(prefix):]] = tmp[1]
+		}
+
+		return branchSet
+	}
+
+	getBranchSet := func (pattern string) (map[string]string, error) {
+		branchOutput, err := execGitCommand([]string{"for-each-ref", "--format", "%(refname) %(objectname)", pattern}, repoPath)
+		if err != nil {
+			return nil, err
+		}
+
+		return branchOutputToSet(branchOutput, pattern), nil
+	}
+
+	remoteBranchSet, err := getBranchSet("refs/remotes/origin/")
+	if err != nil {
+		return nil, err
+	}
+
+	localBranchSet, err := getBranchSet("refs/heads/")
+	if err != nil {
+		return nil, err
+	}
+
+	updatedBranches := map[string]struct{}{}
+	for branch, remoteCommit := range(remoteBranchSet) {
+		localCommit, branchExist := localBranchSet[branch]
+		if !branchExist || localCommit != remoteCommit {
+			updatedBranches[branch] = struct{}{}
+		}
+	}
+
+	return updatedBranches, nil
 }

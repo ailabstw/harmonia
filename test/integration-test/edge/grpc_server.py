@@ -9,7 +9,7 @@ import grpc
 import service_pb2
 import service_pb2_grpc
 
-GRPC_SERVER_URI = "app:7878"
+GRPC_SERVER_URI = "0.0.0.0:7878"
 GRPC_CLIENT_URI = "operator:8787"
 
 logging.basicConfig(
@@ -93,8 +93,7 @@ class EdgeAppServicer(service_pb2_grpc.EdgeAppServicer):
         LOGGER.info("starting local train")
 
         return_values = RETURNS[self.round]
-        # to decrease the possibility of race condition
-        time.sleep(5)
+
         with open(os.path.join("/repos", repo_path, "weights"), "w") as foutput:
             foutput.write(return_values["weights"])
 

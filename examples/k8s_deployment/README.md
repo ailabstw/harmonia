@@ -8,10 +8,12 @@ In a kubernetes cluster, there is an registry for deployments get images. Replac
     ```bash
     docker tag harmonia/operator <image_registry>/harmonia/operator
     docker tag harmonia/fedavg <image_registry>/harmonia/fedavg
+    docker tag harmonia/logserver <image_registry>/harmonia/logserver
     docker tag mnist_edge <image_registry>/mnist_edge
 
     docker push <image_registry>/harmonia/operator
     docker push <image_registry>/harmonia/fedavg
+    docker push <image_registry>/harmonia/logserver
     docker push <image_registry>/mnist_edge
     ```
 
@@ -64,6 +66,7 @@ In a kubernetes cluster, there is an registry for deployments get images. Replac
         "round": 10,
         "edge": 2,
         "EpR": 1,
+        "timeout": 86400,
         "pretrainedModel": "master"
     }
     EOF
@@ -74,3 +77,11 @@ In a kubernetes cluster, there is an registry for deployments get images. Replac
     popd
     rm -rf train-plan
     ```
+
+7. Shows the tensorboard view
+    ```bash
+    # Set port-forward to access gitea by `localhost`
+    kubectl port-forward service/logserver 6006
+    ```
+
+    using browser surfing to `http://localhost:6006`

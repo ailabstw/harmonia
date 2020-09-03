@@ -1,6 +1,6 @@
 # Docker Deployment
 
-For simplification, we simulate real network by a docker network (`mnist`) , and each `docker-compose` within subfolder (`aggregator`, `edge1` and `edge2`) is seen as a isolated computation entity for proof of concept.
+For simplification, we simulate real network by a docker network (`mnist`) , and each `docker-compose` within subfolder (`aggregator`, `edge1`, `edge2` and `logserver`) is seen as a isolated computation entity for proof of concept.
 
 ## Steps
 
@@ -33,14 +33,14 @@ For simplification, we simulate real network by a docker network (`mnist`) , and
 
     Including creates
     * admin account: `gitea` (password: `password`)
-    * user accounts: `aggregator` `edge1` `edge2`
+    * user accounts: `aggregator` `edge1` `edge2` `logserver`
     * repositories: `train-plan` `global-model` `local-model1` `local-model2`
     * repository permissions: TODO
     * webhooks:
         * `train-plan` to `http://aggregator:9080` `http://edge1:9080` `http://edge2:9080`
-        * `global-model` to `http://edge1:9080` `http://edge2:9080`
-        * `local-model1` to `http://aggregator:9080`
-        * `local-model2` to `http://aggregator:9080`
+        * `global-model` to `http://edge1:9080` `http://edge2:9080` `http://logserver:9080`
+        * `local-model1` to `http://aggregator:9080` `http://logserver:9080`
+        * `local-model2` to `http://aggregator:9080` `http://logserver:9080`
 
 4. Push the pretrained model to `global-model`.
     ```bash
@@ -69,6 +69,10 @@ For simplification, we simulate real network by a docker network (`mnist`) , and
     pushd edge2
     docker-compose up -d
     popd
+
+    pushd logserver
+    docker-compose up -d
+    popd
     ```
 
 6. Push a train plan to trigger federated MNIST.
@@ -85,6 +89,7 @@ For simplification, we simulate real network by a docker network (`mnist`) , and
         "round": 10,
         "edge": 2,
         "EpR": 1,
+        "timeout": 86400,
         "pretrainedModel": "master"
     }
     EOF
@@ -96,4 +101,4 @@ For simplification, we simulate real network by a docker network (`mnist`) , and
     popd
     rm -rf train-plan
     ```
-    You can check FL result within Gitea web UI (`http://localhost:3000`).
+    You can check FL result within Gitea web UI (`http://localhost:3000`) or Tensorboard UI (`http://localhost:6006`).

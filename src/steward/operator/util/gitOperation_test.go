@@ -2,6 +2,7 @@ package util
 
 import (
 	"testing"
+	"strings"
 	"github.com/stretchr/testify/suite"
 	"github.com/stretchr/testify/assert"
 
@@ -74,7 +75,44 @@ func TestExecCommand(t *testing.T) {
 	}
 }
 
+func TestExecGitCommand(t *testing.T) {
+	cwd, _ := os.Getwd()
+
+	testCases := map[string] struct{
+		args []string
+		cwd string
+		validate func(string) bool
+		errMsg string
+	} {
+		"version": {
+			[]string{"--version"},
+			cwd,
+			func (output string) bool {
+				prefix := "git version "
+				return output[0:len(prefix)] == prefix
+			},
+			"",
+		},
+	}
+
+	for caseName, testCase := range testCases {
+		output, err := execGitCommand(testCase.args, testCase.cwd)
+		assert.True(t, testCase.validate(output), output, "Case [%s] fails.", caseName)
+		if testCase.errMsg != "" {
+			assert.EqualError(t, err, testCase.errMsg, "Case [%s] fails.", caseName)
+		}
+	}
+}
+
 func TestGitSetup(t *testing.T) {
+	backupName, _ := execGitCommand([]string{"config", "--global", "user.name"}, ".")
+	backupName = strings.TrimSpace(backupName)
+	backupEmail, _ := execGitCommand([]string{"config", "--global", "user.email"}, ".")
+	backupEmail = strings.TrimSpace(backupEmail)
+
+	defer execGitCommand([]string{"config", "--global", "user.name", backupName}, ".")
+	defer execGitCommand([]string{"config", "--global", "user.email", backupEmail}, ".")
+
 	repoDir, _ := ioutil.TempDir("", "*-repo")
 	defer os.RemoveAll(repoDir)
 
@@ -124,14 +162,26 @@ type GitOperationTestSuite struct{
 	suite.Suite
 	remoteRepoURL string
 	localRepoURL string
+	backupName string
+	backupEmail string
 }
 
 func (suite *GitOperationTestSuite) SetupSuite() {
+	suite.backupName, _ = execGitCommand([]string{"config", "--global", "user.name"}, ".")
+	suite.backupName = strings.TrimSpace(suite.backupName)
+	suite.backupEmail, _ = execGitCommand([]string{"config", "--global", "user.email"}, ".")
+	suite.backupEmail = strings.TrimSpace(suite.backupEmail)
+
 	GitSetup(GitUser{
 		"testName",
 		"testMail",
 		"testToken",
 	})
+}
+
+func (suite *GitOperationTestSuite) TearDownSuite() {
+	execGitCommand([]string{"config", "--global", "user.name", suite.backupName}, ".")
+	execGitCommand([]string{"config", "--global", "user.email", suite.backupEmail}, ".")
 }
 
 func (suite *GitOperationTestSuite) BeforeTest(_, testName string) {
@@ -200,6 +250,22 @@ func (suite *GitOperationTestSuite) TestCheckout() {
 	)
 	suite.Assert().NoError(err)
 	suite.Assert().Equal(branchName + "\n", branch)
+}
+
+func (suite *GitOperationTestSuite) TestCheckUpdatedBranches() {
+	branchName := "foo"
+	gitCommitAll(suite.remoteRepoURL, "1st")
+	gitPull(suite.localRepoURL)
+	gitBranch(suite.remoteRepoURL, branchName)
+	gitCommitAll(suite.remoteRepoURL, "2nd")
+
+	updatedBranchSet, err := gitCheckUpdatedBranches(suite.localRepoURL)
+	suite.Assert().NoError(err)
+	
+	suite.Assert().Equal(map[string]struct{} {
+		"master": struct{}{},
+		"foo": struct{}{},
+	}, updatedBranchSet)
 }
 
 // TODO: TestPush

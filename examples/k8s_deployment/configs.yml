@@ -5,7 +5,8 @@ metadata:
 data:
   aggregator-config.yml: |
     type: aggregator
-
+    notification:
+      type: push
     gitUserToken: 1qaz_WSX
     aggregatorModelRepo:
       gitHttpURL: http://aggregator@harmonia-gitea:3000/gitea/global-model.git
@@ -24,7 +25,8 @@ metadata:
 data:
   edge-config.yml: |
     type: edge
-
+    notification:
+      type: push
     gitUserToken: 1qaz_WSX
     aggregatorModelRepo:
       gitHttpURL: http://edge1@harmonia-gitea:3000/gitea/global-model.git
@@ -42,7 +44,8 @@ metadata:
 data:
   edge-config.yml: |
     type: edge
-
+    notification:
+      type: push
     gitUserToken: 1qaz_WSX
     aggregatorModelRepo:
       gitHttpURL: http://edge2@harmonia-gitea:3000/gitea/global-model.git
@@ -50,3 +53,19 @@ data:
       gitHttpURL: http://edge2@harmonia-gitea:3000/gitea/local-model2.git
     trainPlanRepo:
       gitHttpURL: http://edge2@harmonia-gitea:3000/gitea/train-plan.git
+
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logserver-config
+data:
+  logserver-config.yml: |
+    stewardServerURI: "0.0.0.0:9080"
+    gitUserToken: 1qaz_WSX
+    tensorboardDataRootDir: /tensorboard_data
+    modelRepos:
+      - gitHttpURL: http://logserver@harmonia-gitea:3000/gitea/global-model.git
+      - gitHttpURL: http://logserver@harmonia-gitea:3000/gitea/local-model1.git
+      - gitHttpURL: http://logserver@harmonia-gitea:3000/gitea/local-model2.git

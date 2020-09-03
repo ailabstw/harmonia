@@ -19,6 +19,12 @@ type localTrainState struct {
 	roundCount int
 }
 
+type localTrainInterruptedState struct {
+	util.State
+	trainPlan util.TrainPlan
+	roundCount int
+}
+
 type aggregateState struct {
 	util.State
 	trainPlan   util.TrainPlan

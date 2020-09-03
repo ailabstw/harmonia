@@ -28,7 +28,7 @@ def train(baseModel, output_model_path, epochs=1):
 
     base_weight_path = os.path.join("/repos", baseModel.path, "weights.tar")
     try:
-        mnist.train(data, output, epochs=epochs, resume=base_weight_path)
+        metrics = mnist.train(data, output, epochs=epochs, resume=base_weight_path)
     except Exception as err:
         print(err)
 
@@ -40,6 +40,7 @@ def train(baseModel, output_model_path, epochs=1):
         result = service_pb2.LocalTrainResult(
             error=0,
             datasetSize=2500,
+            metrics=metrics
         )
 
         response = stub.LocalTrainFinish(result)
@@ -70,6 +71,10 @@ class EdgeAppServicer(service_pb2_grpc.EdgeAppServicer):
         resp = service_pb2.Empty()
         logging.info("Sending response: {}".format(resp))
         return resp
+
+    def TrainInterrupt(self, _request, _context):
+        # Not Implemented
+        return service_pb2.Empty()
 
 
 def serve():

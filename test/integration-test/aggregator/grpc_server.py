@@ -9,8 +9,8 @@ import grpc
 import service_pb2
 import service_pb2_grpc
 
-GRPC_SERVER_URI = "app:8787"
-GRPC_CLIENT_URI = "operator:7878"
+GRPC_SERVER_URI = "0.0.0.0:7878"
+GRPC_CLIENT_URI = "operator:8787"
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
@@ -88,7 +88,7 @@ class AggregateServerApp(service_pb2_grpc.AggregateServerAppServicer):
 
     def request_validate(self, request):
         expected = EXPECTEDS[self.round]
-        assert len(request.localModels) == 1, "Number of localModels error"
+        assert len(request.localModels) == 2, f"Number of localModels error. Expect [2] Actual [{len(request.localModels)}]"
         assert request.localModels[0].datasetSize == expected["datasetSize"], f"datasetSize error. [{expected['datasetSize']}] expected, [{request.localModels[0].datasetSize}] got"
         assert operator.eq(request.localModels[0].metadata, expected["metadata"]), f"Check metadata fail. [{expected['metadata']}] expected, [{request.localModels[0].metadata}] got"
         assert operator.eq(request.localModels[0].metrics, expected["metrics"]), f"Check metrics fail. [{expected['metrics']}] expected, [{request.localModels[0].metrics}] got"

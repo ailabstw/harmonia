@@ -19,6 +19,10 @@ type pretrainedModelReadyAction struct {
 type trainStartAction struct {
 	util.Action
 }
+type trainCleanupAction struct {
+	util.Action
+	roundCount int
+}
 type trainFinishAction struct {
 	util.Action
 	errCode int
@@ -45,11 +49,36 @@ func WebhookToAction(webhook *util.Webhook, operator util.AbstractOperator) (uti
 			return nil, err
 		}
 
-		plan.CommitID = webhook.LatestCommit[0:6]
 		return &trainPlanAction {
 			trainPlan: *plan,
 		}, nil
 	}
 
 	return nil, fmt.Errorf("invalid webhook")
+}
+
+func PullRepoNotification(operator util.AbstractOperator) ([]util.Action, error) {
+	actions := []util.Action{}
+	operatorPayload := operator.GetPayload().(Payload)
+
+	if branchSet, err := util.CheckUpdatedBranches(operatorPayload.TrainPlanRepoGitHttpURL); err == nil {
+		if _, update := branchSet["master"]; update {
+			plan, err := util.GetTrainPlanData(operatorPayload.TrainPlanRepoGitHttpURL)
+			if err == nil {
+				actions = append(actions, &trainPlanAction {
+					trainPlan: *plan,
+				})
+			}
+		}
+	}
+
+	if branchSet, err := util.CheckUpdatedBranches(operatorPayload.AggregatedModelRepoGitHttpURL); err == nil {
+		for branch, _ := range(branchSet) {
+			actions = append(actions, &baseModelReceivedAction {
+				ref: fmt.Sprintf("refs/heads/%s", branch),
+			})
+		}
+	}
+
+	return actions, nil
 }

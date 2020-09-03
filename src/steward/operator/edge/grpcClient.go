@@ -45,3 +45,15 @@ func sendLocalTrainMessage(appGrpcServerURI string, epochPerRound int, baseModel
 		},
 	)
 }
+
+func sendTrainInterruptMessage(appGrpcServerURI string) {
+	util.EmitEvent(
+		appGrpcServerURI,
+		func(conn *grpc.ClientConn) interface{} {
+			return protos.NewEdgeAppClient(conn)
+		},
+		func(ctx context.Context, client interface{}) (interface{}, error) {
+			return client.(protos.EdgeAppClient).TrainInterrupt(ctx, &protos.Empty{})
+		},
+	)
+}

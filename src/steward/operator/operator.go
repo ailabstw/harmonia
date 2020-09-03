@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"sync"
 	"fmt"
+	"time"
 	"io/ioutil"
 	"net/http"
 	"reflect"
@@ -20,7 +21,10 @@ type Operator struct {
 	state util.State
 	stateTransit util.StateTransit
 
+	// Notification
 	webhookToAction util.WebhookToAction
+	pullRepoNotification util.PullRepoNotification
+
 	grpcServerRegister util.GrpcServerRegisterFunc
 	payload interface{}
 	stateMux *sync.Mutex
@@ -43,32 +47,67 @@ func httpRequestToWebhook(req *http.Request) (*util.Webhook, error) {
 	return &webhook, nil
 }
 
-// HttpHandleFunc : Handle http request
-func (operator *Operator) HttpHandleFunc() util.HttpHandleFunc {
-	defer zap.L().Sync()
-	return func(w http.ResponseWriter, req *http.Request) {
-		zap.L().Info("Receive http request")
-		zap.L().Debug(fmt.Sprintf("payload [%v]", req))
-		webhook, err := httpRequestToWebhook(req)
-		if err != nil {
-			http.Error(w, err.Error(), 500)
-			zap.L().Error("webhook to action error", zap.Error(err))
-			return
+var remoteNoticationFunc = map[reflect.Type] func(operator *Operator, notificationParam util.NotificationParam) {
+	reflect.TypeOf(util.PushNotificationParam{}): func(operator *Operator, notificationParam util.NotificationParam)  {
+		pushNotificationParam := notificationParam.(util.PushNotificationParam)
+		srv := &http.Server{Addr: pushNotificationParam.WebhookURL}
+		http.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+			defer zap.L().Sync()
+
+			zap.L().Info("Receive http request")
+			zap.L().Debug(fmt.Sprintf("payload [%v]", req))
+			webhook, err := httpRequestToWebhook(req)
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				zap.L().Error("webhook to action error", zap.Error(err))
+				return
+			}
+	
+			zap.L().Debug(fmt.Sprintf("Receive webhook [%v]", webhook))
+			action, err := operator.webhookToAction(webhook, operator)
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				zap.L().Error("webhook to action error", zap.Error(err))
+				return
+			}
+	
+			zap.L().Debug(fmt.Sprintf("Perform action [%v] [%v]", reflect.TypeOf(action), action))
+			go operator.Dispatch(action)
+	
+			w.WriteHeader(http.StatusOK)
+		})
+		zap.L().Debug("Steward starts")
+		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+			zap.L().Fatal("Cannot start server on the address",
+				zap.String("service", "http"),
+				zap.String("address", pushNotificationParam.WebhookURL),
+				zap.Error(err))
 		}
+	},
+	reflect.TypeOf(util.PullNotificationParam{}): func(operator *Operator, notificationParam util.NotificationParam) {
+		pullNotificationParam := notificationParam.(util.PullNotificationParam)
+		for true {
+			operator.stateMux.Lock()
+			actions, err := operator.pullRepoNotification(operator)
+			operator.stateMux.Unlock()
 
-		zap.L().Debug(fmt.Sprintf("Receive webhook [%v]", webhook))
-		action, err := operator.webhookToAction(webhook, operator)
-		if err != nil {
-			http.Error(w, err.Error(), 500)
-			zap.L().Error("webhook to action error", zap.Error(err))
-			return
+			if err != nil {
+				zap.L().Error(fmt.Sprintf("pullRepoNotification error [%v]", err))
+			}
+			for _, action := range(actions) {
+				go operator.Dispatch(action)
+			}
+			time.Sleep(time.Duration(pullNotificationParam.PullPeriod) * time.Second)
 		}
+	},
+}
 
-		zap.L().Debug(fmt.Sprintf("Perform action [%v] [%v]", reflect.TypeOf(action), action))
-		go operator.Dispatch(action)
-
-		w.WriteHeader(http.StatusOK)
+func (operator *Operator) RemoteNotificationRegister(notificationParam util.NotificationParam) {
+	if _, ok := remoteNoticationFunc[reflect.TypeOf(notificationParam)]; !ok {
+		zap.L().Fatal(fmt.Sprintf("Invalid notification.type [%v]", reflect.TypeOf(notificationParam)))
 	}
+
+	remoteNoticationFunc[reflect.TypeOf(notificationParam)](operator, notificationParam)
 }
 
 // GrpcServerRegister : register grpc server
@@ -94,9 +133,9 @@ func (operator *Operator) Dispatch(action util.Action) {
 		return
 	}
 
-	nextState, then := operator.stateTransit[reflect.TypeOf(operator.state)][reflect.TypeOf(action)](operator.state, action, operator)
+	nextState, thens := operator.stateTransit[reflect.TypeOf(operator.state)][reflect.TypeOf(action)](operator.state, action, operator)
 	operator.state = nextState
-	if then != nil {
+	for _, then := range(thens) {
 		go then()
 	}
 	zap.L().Debug(" --- State After Dispatching --- ", zap.String("type", fmt.Sprintf("%v", reflect.TypeOf(operator.state))), zap.String("payload", fmt.Sprintf("%v", operator.state)))
@@ -117,6 +156,7 @@ func newAggregateServerOperator(
 		aggregateServer.InitState,
 		aggregateServer.StateTransit,
 		aggregateServer.WebhookToAction,
+		aggregateServer.PullRepoNotification,
 		aggregateServer.GrpcServerRegister,
 		aggregateServer.Payload {
 			GrpcServerURI: appGrpcServerURI,
@@ -139,6 +179,7 @@ func newEdgeOperator(
 		edge.InitState,
 		edge.StateTransit,
 		edge.WebhookToAction,
+		edge.PullRepoNotification,
 		edge.GrpcServerRegister,
 		edge.Payload {
 			GrpcServerURI: appGrpcServerURI,

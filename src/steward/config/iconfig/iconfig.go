@@ -2,11 +2,12 @@ package iconfig
 
 type IConfig struct {
 	Type                  string `yaml:"type"`
-	StewardServerURI      string `yaml:"stewardServerURI"`
 	OperatorGrpcServerURI string `yaml:"operatorGrpcServerURI,omitempty"`
 	AppGrpcServerURI      string `yaml:"appGrpcServerURI,omitempty"`
 	LogLevel              string `yaml:"logLevel"`
 	LogPath               string `yaml:"logPath,omitempty"`
+
+	Notification NotificationInfo `yaml:"notification"`
 
 	// Git Associate
 	GitUserToken        string      `yaml:"gitUserToken"`
@@ -14,6 +15,12 @@ type IConfig struct {
 	EdgeModelRepos      []*RepoInfo `yaml:"edgeModelRepos,omitempty"`
 	EdgeModelRepo       *RepoInfo   `yaml:"edgeModelRepo,omitempty"`
 	TrainPlanRepo     *RepoInfo   `yaml:"trainPlanRepo,omitempty"`
+}
+
+type NotificationInfo struct {
+	Type string `yaml:"type"`   // "push" or "pull"
+	StewardServerURI string `yaml:"stewardServerURI,omitempty"`
+	PullPeriod int `yaml:"pullPeriod,omitempty"`
 }
 
 type RepoInfo struct {

@@ -2,21 +2,31 @@ package util
 
 import (
 	"reflect"
-	"net/http"
+    "time"
 
 	"google.golang.org/grpc"
 )
 
 type State interface {}
 type Action interface {}
-type StateTransit map[reflect.Type] map[reflect.Type] func(State, Action, AbstractOperator) (State, func())
+type StateTransit map[reflect.Type] map[reflect.Type] func(State, Action, AbstractOperator) (State, []func())
 
 type WebhookToAction func(*Webhook, AbstractOperator) (Action, error)
-type HttpHandleFunc func(http.ResponseWriter, *http.Request)
+type PullRepoNotification func(AbstractOperator) ([]Action, error)
+
+type NotificationParam interface {}
+type PushNotificationParam struct {
+	NotificationParam
+	WebhookURL string
+}
+type PullNotificationParam struct {
+	NotificationParam
+	PullPeriod int
+}
 type GrpcServerRegisterFunc func(*grpc.Server, AbstractOperator)
 
 type AbstractOperator interface {
-	HttpHandleFunc() HttpHandleFunc
+	RemoteNotificationRegister(NotificationParam)
 	GrpcServerRegister(*grpc.Server)
 	Dispatch(Action)
 	GetPayload() interface{}
@@ -34,10 +44,12 @@ type Webhook struct {
 }
 
 type TrainPlan struct {
-	Name          string `json:"name"`
-	RoundCount     int `json:"round"`
-	EdgeCount      int `json:"edge"`
-	EpochCount     int `json:"EpR"`
-	CommitID       string
-	PretrainedModelCommitID string `json:"pretrainedModel"`
+	Name                    string `json:"name"`
+	RoundCount              int `json:"round"`
+	EdgeCount               int `json:"edge"`
+	EpochCount     	        int `json:"EpR"`
+	Timeout                 time.Duration `json:"timeout"`
+    PretrainedModelCommitID string `json:"pretrainedModel"`
+
+	CommitID string
 }

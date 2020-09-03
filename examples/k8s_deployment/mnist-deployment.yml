@@ -170,3 +170,69 @@ spec:
     port: 9080
     targetPort: 9080
   type: NodePort
+
+---
+# Logserver
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logserver
+  labels:
+    app: logserver
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: logserver
+  template:
+    metadata:
+      labels:
+        app: logserver
+    spec:
+      containers:
+      - name: operator
+        image: <image_registry>/harmonia/logserver
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 9080
+          name: logserver
+        volumeMounts:
+        - name: config
+          mountPath: /app/config.yml
+          subPath: logserver-config.yml
+        - name: shared-tensorboard-data
+          mountPath: /tensorboard_data
+      - name: tensorboard
+        image: tensorflow/tensorflow
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 6006
+          name: tensorboard
+        volumeMounts:
+        - name: shared-tensorboard-data
+          mountPath: /tensorboard_data
+        command: ["tensorboard"]
+        args: ["--logdir=/tensorboard_data", "--bind_all"]
+      volumes:
+      - name: config
+        configMap:
+          name: logserver-config
+      - name: shared-tensorboard-data
+        emptyDir: {}
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: logserver
+spec:
+  selector:
+    app: logserver
+  ports:
+  - name: logserver
+    port: 9080
+    targetPort: 9080
+  - name: tensorboard
+    port: 6006
+    targetPort: 6006
+  type: NodePort

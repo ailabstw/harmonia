@@ -17,12 +17,16 @@ type localTrainFinishAction struct {
 	util.Action
 	gitHttpURL string
 }
-type pullFinishAction struct {
+type localModelPullFinishAction struct {
 	util.Action
 	gitHttpURL string
 	datasetSize int
 	metadata map[string]string
 	metrics map[string]float64
+}
+type localTrainTimeoutAction struct {
+	util.Action
+	roundCount int
 }
 type aggregateFinishAction struct {
 	util.Action
@@ -52,11 +56,42 @@ func WebhookToAction(webhook *util.Webhook, operator util.AbstractOperator) (uti
 			return nil, err
 		}
 
-		plan.CommitID = webhook.LatestCommit[0:6]
 		return &trainPlanAction {
 			trainPlan: *plan,
 		}, nil
 	}
 
 	return nil, fmt.Errorf("invalid webhook")
+}
+
+func PullRepoNotification(operator util.AbstractOperator) ([]util.Action, error) {
+	operatorPayload := operator.GetPayload().(Payload)
+
+	isRepoUpdated := func(gitURL string) bool {
+		if branchSet, err := util.CheckUpdatedBranches(gitURL); err == nil {
+			_, updated := branchSet["master"]
+			return updated
+		}
+		return false
+	}
+
+	actions := []util.Action{}
+	if isRepoUpdated(operatorPayload.TrainPlanRepoGitHttpURL) {
+		plan, err := util.GetTrainPlanData(operatorPayload.TrainPlanRepoGitHttpURL)
+		if err == nil {
+			actions = append(actions, &trainPlanAction {
+				trainPlan: *plan,
+			})
+		}
+	}
+
+	for _, edgeRepoGitURL := range operatorPayload.EdgeModelRepoGitHttpURLs {
+		if isRepoUpdated(edgeRepoGitURL) {
+			actions = append(actions, &localTrainFinishAction {
+				gitHttpURL: edgeRepoGitURL,
+			})
+		}
+	}
+
+	return actions, nil
 }

@@ -15,10 +15,22 @@ import (
 var Config *iconfig.IConfig
 
 func validateGeneralConfig(config *iconfig.IConfig) {
-	if config.StewardServerURI == "" {
-		config.StewardServerURI = "0.0.0.0:9080"
+	if config.Notification.Type != "pull" {
+		config.Notification.Type = "push"
 	}
-	zap.L().Debug("", zap.String("stewardServerURI", config.StewardServerURI))
+	zap.L().Debug("", zap.String("notification.type", config.Notification.Type))
+
+	if config.Notification.Type == "push" {
+		if config.Notification.StewardServerURI == "" {
+			config.Notification.StewardServerURI = "0.0.0.0:9080"
+		}
+		zap.L().Debug("", zap.String("notification.stewardServerURI", config.Notification.StewardServerURI))
+	} else {
+		if config.Notification.PullPeriod == 0 {
+			config.Notification.PullPeriod = 10
+		}
+		zap.L().Debug("", zap.Int("notification.pullPeriod", config.Notification.PullPeriod))
+	}
 
 	if config.GitUserToken == "" {
 		zap.L().Fatal("gitUserToken undefined")

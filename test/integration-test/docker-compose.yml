@@ -24,35 +24,71 @@ services:
         aliases:
           - operator
       testnet:
-  edge-app:
+        aliases:
+          - aggregator
+  # -------
+  push-edge-app:
     build: ./edge
     volumes:
-      - ./edge_config.yml:/app/config.yml
+      - ./push_edge_config.yml:/app/config.yml
       - type: volume
-        source: edgerepos
+        source: pushedgerepos
         target: /repos
     networks:
-      edge:
+      push-edge:
         aliases:
           - app
-  edge-operator:
+  push-edge-operator:
     image: harmonia/operator
     volumes:
-      - ./edge_config.yml:/app/config.yml
+      - ./push_edge_config.yml:/app/config.yml
       - type: volume
-        source: edgerepos
+        source: pushedgerepos
         target: /repos
     networks:
-      edge:
+      push-edge:
         aliases:
           - operator
       testnet:
+        aliases:
+          - push-edge
+  # -------
+  pull-edge-app:
+    build: ./edge
+    volumes:
+      - ./pull_edge_config.yml:/app/config.yml
+      - type: volume
+        source: pulledgerepos
+        target: /repos
+    networks:
+      pull-edge:
+        aliases:
+          - app
+  pull-edge-operator:
+    image: harmonia/operator
+    volumes:
+      - ./pull_edge_config.yml:/app/config.yml
+      - type: volume
+        source: pulledgerepos
+        target: /repos
+    networks:
+      pull-edge:
+        aliases:
+          - operator
+      testnet:
+        aliases:
+          - pull-edge
+
 networks:
-  edge:
+  # simulate network within a participant
   aggregator:
+  push-edge:
+  pull-edge:
+
   testnet:
     external: true
     name: integration-test
 volumes:
   aggrepos:
-  edgerepos:
+  pushedgerepos:
+  pulledgerepos:

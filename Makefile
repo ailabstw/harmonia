@@ -1,6 +1,7 @@
 IMAGE_FOLDERS = \
 	src/steward \
 	src/fedavg \
+	src/logserver \
 
 SDK_FOLDERS = \
 	src/protos \
@@ -21,6 +22,7 @@ clean:
 
 unit-test:
 	make -C src/steward test
+	make -C src/logserver test
 
 test:
 	make -C $@

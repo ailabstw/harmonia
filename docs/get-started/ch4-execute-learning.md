@@ -9,6 +9,7 @@ Push a training plan, named `plan.json`, to `train-plan` repository.
     "round": 100,
     "edge": 2,
     "EpR": 1,
+    "timeout": 86400,
     "pretrainedModel": "master"
 }
 ```
