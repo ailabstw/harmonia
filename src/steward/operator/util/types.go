@@ -2,7 +2,6 @@ package util
 
 import (
 	"reflect"
-    "time"
 
 	"google.golang.org/grpc"
 )
@@ -30,6 +29,7 @@ type AbstractOperator interface {
 	GrpcServerRegister(*grpc.Server)
 	Dispatch(Action)
 	GetPayload() interface{}
+	TrainFinish()
 }
 
 type Repository struct {
@@ -39,7 +39,6 @@ type Repository struct {
 
 type Webhook struct {
 	Repo         Repository `json:"repository"`
-	LatestCommit string     `json:"after"`
 	Ref          string     `json:"ref"`
 }
 
@@ -48,7 +47,7 @@ type TrainPlan struct {
 	RoundCount              int `json:"round"`
 	EdgeCount               int `json:"edge"`
 	EpochCount     	        int `json:"EpR"`
-	Timeout                 time.Duration `json:"timeout"`
+	Timeout                 int `json:"timeout"`
     PretrainedModelCommitID string `json:"pretrainedModel"`
 
 	CommitID string

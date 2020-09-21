@@ -1,7 +1,6 @@
 from concurrent import futures
 import logging
-import time
-from threading import Thread
+import threading
 import os
 import grpc
 import merge
@@ -13,6 +12,7 @@ APPLICATION_URI = os.getenv('APPLICATION_URI', '0.0.0.0:7878')
 LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
 REPO_ROOT = os.environ.get('REPO_ROOT', '/repos')
 MODEL_FILENAME = os.environ.get('MODEL_FILENAME', 'weights.tar')
+STOP_EVENT = threading.Event()
 
 AGGREGATE_SUCCESS = 0
 AGGREGATE_CONDITION = 1
@@ -56,7 +56,7 @@ class AggregateServerServicer(service_pb2_grpc.AggregateServerAppServicer):
     def Aggregate(self, request, context):
         logging.info("received Aggregate message [%s]", request)
 
-        Thread(
+        threading.Thread(
             target=aggregate,
             args=(request.localModels, request.aggregatedModel),
             daemon=True
@@ -65,6 +65,10 @@ class AggregateServerServicer(service_pb2_grpc.AggregateServerAppServicer):
         response = service_pb2.Empty()
         return response
 
+    def TrainFinish(self, _request, _context):
+        logging.info("received TrainFinish message")
+        STOP_EVENT.set()
+        return service_pb2.Empty()
 
 def serve():
     logging.info("Start server... [%s]", APPLICATION_URI)
@@ -74,9 +78,10 @@ def serve():
         AggregateServerServicer(), server)
     server.add_insecure_port(APPLICATION_URI)
     server.start()
-    while True:
-        time.sleep(10)
 
+    STOP_EVENT.wait()
+    logging.info("Server Stop")
+    server.stop(None)
 
 if __name__ == "__main__":
     serve()

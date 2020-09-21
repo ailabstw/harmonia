@@ -1,13 +1,13 @@
 from concurrent import futures
 import logging
-import time
 import os
 import operator
-from threading import Thread
-
+import threading
 import grpc
 import service_pb2
 import service_pb2_grpc
+
+STOP_EVENT = threading.Event()
 
 GRPC_SERVER_URI = "0.0.0.0:7878"
 GRPC_CLIENT_URI = "operator:8787"
@@ -126,12 +126,17 @@ class EdgeAppServicer(service_pb2_grpc.EdgeAppServicer):
 
         self.request_validate(request)
 
-        Thread(
+        threading.Thread(
             target=self.send_response,
             daemon=True,
             args=(request.localModel.path, )
         ).start()
 
+        return service_pb2.Empty()
+
+    def TrainFinish(self, _0, _1):
+        LOGGER.info("Train Finish")
+        STOP_EVENT.set()
         return service_pb2.Empty()
 
 def serve():
@@ -145,7 +150,10 @@ def serve():
     LOGGER.info("listen on [%s]", GRPC_SERVER_URI)
     server.add_insecure_port("[::]:" + GRPC_SERVER_URI.split(":")[1])
     server.start()
-    server.wait_for_termination()
+
+    STOP_EVENT.wait()
+    LOGGER.info("Server Stop")
+    server.stop(None)
 
 
 if __name__ == "__main__":

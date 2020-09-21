@@ -11,7 +11,7 @@ image: protos
 	docker run --rm \
 		-v $(PROJ_ROOT)/src/steward:/src \
 		-w /src \
-		golang:buster go build
+		golang:1.15.2-alpine3.12 go build
 	docker build --tag harmonia/operator .
 
 debug_image: protos

@@ -1,11 +1,9 @@
-FROM golang:buster
+FROM alpine
 
-# build golang app
-RUN apt-get update -y && \
-    apt-get install -y git-lfs && \
-    apt-get install -y file && \
-    rm -rf /var/lib/apt/lists/*
-RUN git lfs install
+RUN apk add --no-cache git git-lfs file && \ 
+    # pip3 install --no-cache-dir dvc 
+    git lfs install
+
 WORKDIR /app
 ADD steward /app/steward
 

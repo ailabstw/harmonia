@@ -51,7 +51,10 @@ docker-compose up -d --build
 until [ "`docker inspect -f {{.State.Running}} ${DIR}_aggregator-app_1`"=="true" ]; do
     sleep 1;
 done;
-until [ "`docker inspect -f {{.State.Running}} ${DIR}_edge-app_1`"=="true" ]; do
+until [ "`docker inspect -f {{.State.Running}} ${DIR}_push-edge-app_1`"=="true" ]; do
+    sleep 1;
+done;
+until [ "`docker inspect -f {{.State.Running}} ${DIR}_pull-edge-app_1`"=="true" ]; do
     sleep 1;
 done;
 sleep 1;
@@ -61,11 +64,9 @@ docker run --rm \
     --network ${DIR} \
     python bash -c "pip3 install requests==2.21.* && python3 /setup/setup.py set-plan '{\"round\": 2, \"edge\": 3, \"EpR\": 3, \"timeout\": 5}'"
 
-SEC=30
-[ ! -z "$GITLAB_CI" ] && SEC=240
-echo "sleeping ${SEC} seconds to wait the harmonia system finished one round"
-spin $SEC
-echo "stopping docker-compose"
-docker-compose stop
+time docker wait \
+    ${DIR}_aggregator-app_1 ${DIR}_push-edge-app_1 ${DIR}_pull-edge-app_1 \
+    ${DIR}_aggregator-operator_1 ${DIR}_push-edge-operator_1 ${DIR}_pull-edge-operator_1    
+
 docker-compose logs --no-color > logs.txt
 python3 parsing_log.py logs.txt

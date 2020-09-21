@@ -1,180 +1,141 @@
-from datetime import datetime
 import sys
 import re
-import json
 
-
-target_logs = [
-    ('aggregator-operator',
-     'Repository [aggregatorModelRepo]: &{http://harmonia_admin@test_gitea:3000/harmonia_admin/global-model.git}'),
-    ('aggregator-operator',
-     'Repository [edgeModelRepos[0]]: &{http://harmonia_admin@test_gitea:3000/harmonia_admin/local-model1.git}'),
-    ('aggregator-operator',
-     'Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/global-model.git] [/repos/harmonia_admin/global-model]...'),
-    ('aggregator-operator',
-     'Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/local-model1.git] [/repos/harmonia_admin/local-model1]...'),
-    ('aggregator-operator',
-     'Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/train-plan.git] [/repos/harmonia_admin/train-plan]...'),
-    ('aggregator-operator', 'Init Finished'),
-    ('aggregator-operator', 'Receive webhook', 'train-plan'),
-    ('aggregator-operator',
-     'Pulling Data [/repos/harmonia_admin/train-plan]...'),
-    ('aggregator-operator', 'aggregateServer.idleState'),
-    ('aggregator-operator', 'aggregateServer.trainStartAction'),
-    ('aggregator-operator', 'aggregateServer.localTrainState'),
-    ('aggregator-operator', 'Receive webhook', 'local-model'),
-    ('aggregator-operator', 'aggregateServer.localTrainState'),
-    ('aggregator-operator', 'aggregateServer.localTrainFinishAction'),
-    ('aggregator-operator',
-     'Pulling Data [/repos/harmonia_admin/local-model1]...'),
-    ('aggregator-operator', 'Pull Succeed'),
-    ('aggregator-operator', 'aggregateServer.localTrainTimeoutAction'),
-    ('aggregator-operator', 'aggregateServer.aggregateState'),
-    ('aggregator-operator', '--- On Aggregate Finish ---'),
-    ('aggregator-operator', 'aggregateServer.aggregateState'),
-    ('aggregator-operator', 'aggregateServer.aggregateFinishAction'),
-    ('aggregator-operator',
-     'Pushing to [/repos/harmonia_admin/global-model] args [[--all]]...'),
-    ('aggregator-operator', 'Push Succeed'),
-    ('aggregator-operator', 'aggregateServer.idleState'),
-    # ----------
-    ('push-edge-operator',
-     'Repository [aggregatorModelRepo]: &{http://harmonia_admin@test_gitea:3000/harmonia_admin/global-model.git}'),
-    ('push-edge-operator',
-     'Repository [edgeModelRepo]: &{http://harmonia_admin@test_gitea:3000/harmonia_admin/local-model2.git}'),
-    ('push-edge-operator',
-     'Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/global-model.git] [/repos/harmonia_admin/global-model]...'),
-    ('push-edge-operator',
-     'Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/local-model2.git] [/repos/harmonia_admin/local-model2]...'),
-    ('push-edge-operator',
-     'Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/train-plan.git] [/repos/harmonia_admin/train-plan]...'),
-    ('push-edge-operator', 'Init Finished'),
-    ('push-edge-operator', 'Receive webhook'),
-    ('push-edge-operator',
-     'Pulling Data [/repos/harmonia_admin/train-plan]...'),
-    ('push-edge-operator', 'edge.idleState', 1),
-    ('push-edge-operator', 'edge.trainPlanAction'),
-    ('push-edge-operator', 'edge.trainInitState'),
-    ('push-edge-operator', 'edge.trainStartAction'),
-    ('push-edge-operator', 'edge.localTrainState'),
-    ('push-edge-operator', 'edge.trainFinishAction'),
-    ('push-edge-operator',
-     'Pushing to [/repos/harmonia_admin/local-model2] args [[--all]]...'),
-    ('push-edge-operator', 'Push Succeed'),
-    ('push-edge-operator', 'edge.aggregateState'),
-    ('push-edge-operator', 'edge.baseModelReceivedAction'),
-    ('push-edge-operator', 'edge.localTrainState'),
-    ('push-edge-operator', 'edge.trainFinishAction'),
-    ('push-edge-operator', 'edge.idleState', 2),
-    ('push-edge-operator', 'Receive webhook'),
-    ('push-edge-operator', 'edge.idleState', 3),
-    ('push-edge-operator', 'edge.baseModelReceivedAction'),
-    ('push-edge-operator', 'edge.idleState', 4),
-    # ----------
-    ('pull-edge-operator',
-     'Repository [aggregatorModelRepo]: &{http://harmonia_admin@test_gitea:3000/harmonia_admin/global-model.git}'),
-    ('pull-edge-operator',
-     'Repository [edgeModelRepo]: &{http://harmonia_admin@test_gitea:3000/harmonia_admin/local-model1.git}'),
-    ('pull-edge-operator',
-     'Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/global-model.git] [/repos/harmonia_admin/global-model]...'),
-    ('pull-edge-operator',
-     'Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/local-model1.git] [/repos/harmonia_admin/local-model1]...'),
-    ('pull-edge-operator',
-     'Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/train-plan.git] [/repos/harmonia_admin/train-plan]...'),
-    ('pull-edge-operator', 'Init Finished'),
-    ('pull-edge-operator',
-     'Pulling Data [/repos/harmonia_admin/train-plan]...'),
-    ('pull-edge-operator', 'edge.idleState', 1),
-    ('pull-edge-operator', 'edge.trainPlanAction'),
-    ('pull-edge-operator', 'edge.trainInitState'),
-    ('pull-edge-operator', 'edge.trainStartAction'),
-    ('pull-edge-operator', 'edge.localTrainState'),
-    ('pull-edge-operator', 'edge.trainFinishAction'),
-    ('pull-edge-operator',
-     'Pushing to [/repos/harmonia_admin/local-model1] args [[--all]]...'),
-    ('pull-edge-operator', 'Push Succeed'),
-    ('pull-edge-operator', 'edge.aggregateState'),
-    ('pull-edge-operator', 'edge.baseModelReceivedAction'),
-    ('pull-edge-operator', 'edge.localTrainState'),
-    ('pull-edge-operator', 'edge.trainFinishAction'),
-    ('pull-edge-operator', 'edge.idleState', 2),
-    ('pull-edge-operator', 'edge.idleState', 3),
-    ('pull-edge-operator', 'edge.baseModelReceivedAction'),
-    ('pull-edge-operator', 'edge.idleState', 4),
-]
-
-
-n_test_cases = len(target_logs)
-
-
-class LogContent:
-    def __init__(self, line):
-        self.container_name = None
-        self.datetime = None
-        self.raw_msg = None
-
-        match = re.search(
-            r'^(?P<name>[\w\-]+)[\s\|]+(?P<msg>.*)', line)
-        if match:
-            self.container_name = match.group('name')
-            try:
-                json_string = match.group('msg')
-                json_obj = json.loads(json_string)
-                self.datetime = datetime.strptime(json_obj['timestamp'], '%Y-%m-%dT%H:%M:%S.%fZ')
-                self.raw_msg = json_string
-            except Exception:
-                NotImplemented
+EXPECTED = {
+    'aggregator-operator_1': [
+        ('Repository [aggregatorModelRepo]: &{http://harmonia_admin@test_gitea:3000/harmonia_admin/global-model.git}', ),
+        ('Repository [edgeModelRepos[0]]: &{http://harmonia_admin@test_gitea:3000/harmonia_admin/local-model1.git}', ),
+        ('Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/global-model.git] [/repos/harmonia_admin/global-model]...', ),
+        ('Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/local-model1.git] [/repos/harmonia_admin/local-model1]...', ),
+        ('Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/train-plan.git] [/repos/harmonia_admin/train-plan]...', ),
+        ('Init Finished', ),
+        ('Receive webhook', 'train-plan', ),
+        ('Pulling Data [/repos/harmonia_admin/train-plan]...', ),
+        ('aggregateServer.idleState', ),
+        ('aggregateServer.trainStartAction', ),
+        ('aggregateServer.localTrainState', ),
+        ('Receive webhook', 'local-model', ),
+        ('aggregateServer.localTrainState', ),
+        ('aggregateServer.localTrainFinishAction', ),
+        ('Pulling Data [/repos/harmonia_admin/local-model1]...', ),
+        ('Pull Succeed', ),
+        ('aggregateServer.localTrainTimeoutAction', ),
+        ('aggregateServer.aggregateState', ),
+        ('--- On Aggregate Finish ---', ),
+        ('aggregateServer.aggregateState', ),
+        ('aggregateServer.aggregateFinishAction', ),
+        ('Pushing to [/repos/harmonia_admin/global-model] args [[--all]]...', ),
+        ('Push Succeed', ),
+        ('aggregateServer.idleState', ),
+    ],
+    'push-edge-operator_1': [
+        ('Repository [aggregatorModelRepo]: &{http://harmonia_admin@test_gitea:3000/harmonia_admin/global-model.git}', ),
+        ('Repository [edgeModelRepo]: &{http://harmonia_admin@test_gitea:3000/harmonia_admin/local-model2.git}', ),
+        ('Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/global-model.git] [/repos/harmonia_admin/global-model]...', ),
+        ('Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/local-model2.git] [/repos/harmonia_admin/local-model2]...', ),
+        ('Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/train-plan.git] [/repos/harmonia_admin/train-plan]...', ),
+        ('Init Finished', ),
+        ('Receive webhook', ),
+        ('Pulling Data [/repos/harmonia_admin/train-plan]...', ),
+        ('edge.idleState', 1, ),
+        ('edge.trainPlanAction', ),
+        ('edge.trainInitState', ),
+        ('edge.trainStartAction', ),
+        ('edge.localTrainState', ),
+        ('edge.trainFinishAction', ),
+        ('Pushing to [/repos/harmonia_admin/local-model2] args [[--all]]...', ),
+        ('Push Succeed', ),
+        ('edge.aggregateState', ),
+        ('edge.baseModelReceivedAction', ),
+        ('edge.localTrainState', ),
+        ('edge.trainFinishAction', ),
+        ('edge.idleState', 2, ),
+        ('Receive webhook', ),
+        ('edge.idleState', 3, ),
+        ('edge.baseModelReceivedAction', ),
+    ],
+    'pull-edge-operator_1': [
+        ('Repository [aggregatorModelRepo]: &{http://harmonia_admin@test_gitea:3000/harmonia_admin/global-model.git}', ),
+        ('Repository [edgeModelRepo]: &{http://harmonia_admin@test_gitea:3000/harmonia_admin/local-model1.git}', ),
+        ('Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/global-model.git] [/repos/harmonia_admin/global-model]...', ),
+        ('Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/local-model1.git] [/repos/harmonia_admin/local-model1]...', ),
+        ('Cloning Data from [http://harmonia_admin@test_gitea:3000/harmonia_admin/train-plan.git] [/repos/harmonia_admin/train-plan]...', ),
+        ('Init Finished', ),
+        ('Pulling Data [/repos/harmonia_admin/train-plan]...', ),
+        ('edge.idleState', 1, ),
+        ('edge.trainPlanAction', ),
+        ('edge.trainInitState', ),
+        ('edge.trainStartAction', ),
+        ('edge.localTrainState', ),
+        ('edge.trainFinishAction', ),
+        ('Pushing to [/repos/harmonia_admin/local-model1] args [[--all]]...', ),
+        ('Push Succeed', ),
+        ('edge.aggregateState', ),
+        ('edge.baseModelReceivedAction', ),
+        ('edge.localTrainState', ),
+        ('edge.trainFinishAction', ),
+        ('edge.idleState', 2, ),
+        ('edge.idleState', 3, ),
+        ('edge.baseModelReceivedAction', ),
+    ],
+    'push-edge-app_1': [
+        ('Train Finish', ),
+        ('Server Stop', ),
+    ],
+    'pull-edge-app_1': [
+        ('Train Finish', ),
+        ('Server Stop', ),
+    ],
+}
 
 def parse_log_file(filename):
-    log_contents = []
     with open(filename, 'r') as logfile:
-        for line in logfile:
-            if not target_logs:
-                break
-            parse_line(line, log_contents)
+        def docker_log_parse(line):
+            try:
+                match = re.search(r'^(?P<name>[\w\-]+)[\s]*\|[\s]*(?P<msg>.*)', line)
+                return match.group('name'), match.group('msg')
+            except Exception:
+                return None, None
 
-    return check_result(log_contents)
 
-def parse_line(line, log_contents):
-    for i, (container_name, target, *_)in enumerate(target_logs):
-        if container_name in line and target in line:
-            log_contents.append(LogContent(line))
-            target_logs.pop(i)
-            break
+        parsed_logs = filter(
+            lambda line: line[0],
+            map(docker_log_parse, logfile),
+        )
+        # pprint(list(parsed_logs))
 
-def check_result(log_contents):
-    if target_logs or not log_contents:
-        print('the number of log contents is less then test cases')
-        for lg in log_contents:
-            print(lg.datetime,
-                  lg.container_name, lg.raw_msg)
+        grouped_logs = {}
+        for parsed_log in parsed_logs:
+            if parsed_log[0] in grouped_logs:
+                grouped_logs[parsed_log[0]].append(parsed_log[1])
+            else:
+                grouped_logs[parsed_log[0]] = [parsed_log[1]]
 
-        print('It remains...')
-        for tl in target_logs:
-            print(tl)
-        return False
-    log_contents.sort(key=lambda x: (x.container_name, x.datetime))
+        return grouped_logs
 
-    prev_name = log_contents[0].container_name
-    prev_dt = log_contents[0].datetime
-    for lc in log_contents[1:]:
-        if lc.container_name == prev_name:
-            if lc.datetime < prev_dt:
-                print('log contents...')
-                print()
-                for log_content, _ in log_contents:
-                    print(log_content.datetime,
-                        log_content.container_name, log_content.raw_msg)
-                return False
-        else:
-            prev_name = lc.container_name
-        prev_dt = lc.datetime
-    return True
+def validate(actual_logs):
+    insufficient_logs = dict(map(
+        lambda expected_container_logs: (
+            expected_container_logs[0],
+            list(filter(
+                lambda expected_log: not any(map(lambda actual_log: expected_log[0] in actual_log, actual_logs[expected_container_logs[0]])),
+                expected_container_logs[1],
+            )),
+        ),
+        EXPECTED.items(),
+    ))
 
+    return insufficient_logs
+
+
+def main():
+    filename = sys.argv[1]
+    actual_logs = parse_log_file(filename)
+
+    assert all(map(
+        lambda insufficient_container_logs: len(insufficient_container_logs[1]) == 0,
+        validate(actual_logs).items()
+    )), validate(actual_logs)
 
 if __name__ == "__main__":
-    filename = sys.argv[1]
-    if parse_log_file(filename):
-        print('Integration Test Pass')
-    else:
-        sys.exit('Integration Test Fail!')
+    main()

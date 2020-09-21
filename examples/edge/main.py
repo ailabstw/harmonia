@@ -1,7 +1,6 @@
 from concurrent import futures
 import logging
-import time
-from threading import Thread
+import threading
 import os
 import random
 import grpc
@@ -12,6 +11,7 @@ import mnist
 OPERATOR_URI = os.getenv('OPERATOR_URI', "localhost:8787")
 APPLICATION_URI = "0.0.0.0:7878"
 __DATA = []
+STOP_EVENT = threading.Event()
 
 def get_training_data():
     global __DATA
@@ -62,7 +62,7 @@ class EdgeAppServicer(service_pb2_grpc.EdgeAppServicer):
     def LocalTrain(self, request, context):
         logging.info("LocalTrain")
 
-        Thread(
+        threading.Thread(
             target=train,
             args=(request.baseModel, request.localModel.path, request.EpR),
             daemon=True
@@ -76,6 +76,11 @@ class EdgeAppServicer(service_pb2_grpc.EdgeAppServicer):
         # Not Implemented
         return service_pb2.Empty()
 
+    def TrainFinish(self, _request, _context):
+        logging.info("TrainFinish")
+        STOP_EVENT.set()
+        return service_pb2.Empty()
+
 
 def serve():
     logging.basicConfig(level=logging.DEBUG)
@@ -87,9 +92,10 @@ def serve():
         EdgeAppServicer(), server)
     server.add_insecure_port(APPLICATION_URI)
     server.start()
-    while True:
-        time.sleep(10)
 
+    STOP_EVENT.wait()
+    logging.info("Server Stop")
+    server.stop(None)
 
 if __name__ == "__main__":
     serve()

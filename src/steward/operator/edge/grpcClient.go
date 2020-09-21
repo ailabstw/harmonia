@@ -57,3 +57,15 @@ func sendTrainInterruptMessage(appGrpcServerURI string) {
 		},
 	)
 }
+
+func sendTrainFinishMessage(appGrpcServerURI string) {
+	util.EmitEvent(
+		appGrpcServerURI,
+		func(conn *grpc.ClientConn) interface{} {
+			return protos.NewEdgeAppClient(conn)
+		},
+		func(ctx context.Context, client interface{}) (interface{}, error) {
+			return client.(protos.EdgeAppClient).TrainFinish(ctx, &protos.Empty{})
+		},
+	)
+}

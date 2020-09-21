@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"sync"
 	"net"
 
 	"google.golang.org/grpc"
@@ -18,10 +17,8 @@ import (
 // Make an enqueuer with a particular namespace
 var enqueuer *work.Enqueuer
 
-func startNotificationServer(wg *sync.WaitGroup, operator *operator.Operator) {
+func startNotificationServer(operator *operator.Operator) {
 	go func() {
-		defer wg.Done()
-
 		notificationParam := func() util.NotificationParam {
 			switch config.Config.Notification.Type {
 			case "push":
@@ -42,7 +39,7 @@ func startNotificationServer(wg *sync.WaitGroup, operator *operator.Operator) {
 	}()
 }
 
-func startGrpcServer(wg *sync.WaitGroup, address string, operator *operator.Operator) *grpc.Server {
+func startGrpcServer(address string, operator *operator.Operator) *grpc.Server {
 
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
@@ -55,8 +52,6 @@ func startGrpcServer(wg *sync.WaitGroup, address string, operator *operator.Oper
 	grpcServer := grpc.NewServer(opts...)
 
 	go func() {
-		defer wg.Done()
-
 		zap.L().Debug("Grpc server listen the address",
 			zap.String("service", "grpc"),
 			zap.String("address", address))
@@ -109,10 +104,9 @@ func init() {
 func main() {
 	defer zap.L().Sync()
 
-	wg := &sync.WaitGroup{}
-
 	var edgeModelRepoGitHttpURLs []string
 	var edgeModelRepoGitHttpURL string
+	flFinish := make(chan bool, 1)
 
 	if config.Config.EdgeModelRepos != nil {	
 		edgeModelRepoGitHttpURLs = make([]string, len(config.Config.EdgeModelRepos))
@@ -129,16 +123,16 @@ func main() {
 		config.Config.AggregatedModelRepo.GitHttpURL,
 		edgeModelRepoGitHttpURL,
 		edgeModelRepoGitHttpURLs,
+		func() {
+			flFinish <- true
+		},
 	)
 
-	wg.Add(1)
-	startGrpcServer(wg, config.Config.OperatorGrpcServerURI, operator)
-
-	wg.Add(1)
-	startNotificationServer(wg, operator)
+	startGrpcServer(config.Config.OperatorGrpcServerURI, operator)
+	startNotificationServer(operator)
 
 	zap.L().Info("steward startup")
 
-	wg.Wait()
+	<- flFinish
 	zap.L().Info("main: done. exiting")
 }

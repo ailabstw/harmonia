@@ -20,6 +20,7 @@ func (*mockOperator) Dispatch(util.Action) {}
 func (*mockOperator) GetPayload() interface{} {
 	return nil
 }
+func (*mockOperator) TrainFinish() {}
 
 // TODO: transit
 func TestStateTransit(t *testing.T) {

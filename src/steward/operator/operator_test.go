@@ -63,6 +63,7 @@ func (suite *AggregateServerOperatorTestSuite) TestNew() {
 		"url2",
 		"",
 		[]string{"url3", "url4"},
+		func() {},
 	)
 	suite.Assert().Equal(
 		"url3",
@@ -161,6 +162,7 @@ func (suite *AggregateServerOperatorTestSuite) TestDispatch() {
 			dummyGrpcServerRegister,
 			nil,
 			&sync.Mutex{},
+			func() {},
 		}
 		operator.Dispatch(testCase.action)
 

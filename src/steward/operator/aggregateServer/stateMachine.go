@@ -43,7 +43,7 @@ var StateTransit = util.StateTransit {
 				webhooks: []string{},
 			}, []func() {
 				func () {
-					time.Sleep(waitPretrainModelState.trainPlan.Timeout * time.Second)
+					time.Sleep(time.Duration(waitPretrainModelState.trainPlan.Timeout) * time.Second)
 					operator.Dispatch(&localTrainTimeoutAction{
 						roundCount: 0,
 					})
@@ -200,6 +200,11 @@ var StateTransit = util.StateTransit {
 							zap.L().Error("push aggregated model error", zap.Error(err))
 							return
 						}
+
+						sendTrainFinishMessage(
+							operator.GetPayload().(Payload).GrpcServerURI,
+						)
+						operator.TrainFinish()
 					},
 				}
 			} else {
@@ -233,7 +238,7 @@ var StateTransit = util.StateTransit {
 
 						// ------
 
-						time.Sleep(aggregateState.trainPlan.Timeout * time.Second)
+						time.Sleep(time.Duration(aggregateState.trainPlan.Timeout) * time.Second)
 						operator.Dispatch(&localTrainTimeoutAction{
 							roundCount: aggregateState.roundCount + 1,
 						})

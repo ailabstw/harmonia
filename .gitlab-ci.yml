@@ -1,0 +1,137 @@
+variables:
+  DOCKER_DRIVER: overlay
+
+services:
+  - docker:stable-dind
+
+stages:
+  - build-protos
+  - unit-test
+  - build
+  - integration-test
+
+# --------
+build-go-protos:
+  stage: build-protos
+  image: docker
+  before_script:
+    - apk update; apk add make
+  script:
+    - make -C src/protos go_protos
+  artifacts:
+    paths:
+      - src/protos/go_protos
+    expire_in: 0.5 days
+
+build-python-protos:
+  stage: build-protos
+  image: docker
+  before_script:
+    - apk update; apk add make
+  script:
+    - make -C src/protos python_protos
+  artifacts:
+    paths:
+      - src/protos/python_protos
+    expire_in: 0.5 days
+
+# --------
+
+operator-unit-test:
+  stage: unit-test
+  image: golang:buster
+  script:
+    - make -C src/steward protos
+    - make -C src/steward unit_test
+  dependencies:
+    - build-go-protos
+
+logserver-unit-test:
+  stage: unit-test
+  image: python
+  script:
+    - cp src/logserver/Makefile src/
+    - make -C src/ unit_test
+
+# --------
+
+build-operator:
+  stage: build
+  image: docker
+  before_script:
+    - apk update; apk add make
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+  script:
+    - make -C src/steward 
+  after_script:
+    - docker tag harmonia/operator $CI_REGISTRY_IMAGE/operator:$CI_COMMIT_REF_SLUG
+    - docker push $CI_REGISTRY_IMAGE/operator:$CI_COMMIT_REF_SLUG
+  dependencies:
+    - build-go-protos
+
+build-fedavg:
+  stage: build
+  image: docker
+  before_script:
+    - apk update; apk add make
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+    - docker pull $CI_REGISTRY_IMAGE/pytorch/pytorch
+    - docker tag $CI_REGISTRY_IMAGE/pytorch/pytorch pytorch/pytorch
+  script:
+    - make -C src/fedavg
+  after_script:
+    - docker tag harmonia/fedavg $CI_REGISTRY_IMAGE/fedavg:$CI_COMMIT_REF_SLUG
+    - docker push $CI_REGISTRY_IMAGE/fedavg:$CI_COMMIT_REF_SLUG
+  dependencies:
+    - build-python-protos
+
+build-logserver:
+  stage: build
+  image: docker
+  before_script:
+    - apk update; apk add make
+  script:
+    - make -C src/logserver
+  after_script:
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+    - docker tag harmonia/logserver $CI_REGISTRY_IMAGE/logserver:$CI_COMMIT_REF_SLUG
+    - docker push $CI_REGISTRY_IMAGE/logserver:$CI_COMMIT_REF_SLUG
+
+# --------
+# Dockerfile of image `docker-compose`
+#######
+# FROM docker
+
+# RUN apk add --no-cache py3-pip python3-dev libffi-dev openssl-dev curl gcc libc-dev make && \
+#     pip3 install docker-compose
+#######
+
+
+integration-test:
+  stage: integration-test
+  image: $CI_REGISTRY_IMAGE/docker-compose
+  before_script:
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+    - docker pull $CI_REGISTRY_IMAGE/operator:$CI_COMMIT_REF_SLUG
+    - docker tag $CI_REGISTRY_IMAGE/operator:$CI_COMMIT_REF_SLUG harmonia/operator
+    - docker pull $CI_REGISTRY_IMAGE/fedavg:$CI_COMMIT_REF_SLUG
+    - docker tag $CI_REGISTRY_IMAGE/fedavg:$CI_COMMIT_REF_SLUG harmonia/fedavg
+  script:
+    - make -C test/integration-test test
+  dependencies:
+    - build-fedavg
+    - build-operator
+
+fedavg-test:
+  stage: integration-test
+  image: $CI_REGISTRY_IMAGE/docker-compose
+  before_script:
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+    - docker pull $CI_REGISTRY_IMAGE/fedavg:$CI_COMMIT_REF_SLUG
+    - docker tag $CI_REGISTRY_IMAGE/fedavg:$CI_COMMIT_REF_SLUG harmonia/fedavg
+  script:
+    - make -C test/fedavg test
+  after_script:
+    - make -C test/fedavg clean
+  dependencies:
+    - build-fedavg

@@ -241,11 +241,11 @@ gRPC protocol:
 
 gRPC protocol:
 * Message to `Application`
-    * TrainInit:
+    * **TrainInit**:
         Edges should initialize FL while receiving this message triggered by a train plan.
         **Message Inputs: Empty**
         **Message Outputs: Empty**
-    * LocalTrain:
+    * **LocalTrain**:
         This event is sent when receiving an `aggregated model` indicating another local train is ready to process.  
         **Message Inputs: LocalTrainParams**  
         ```protobuf
@@ -289,13 +289,17 @@ gRPC protocol:
         }
         ```
         **Message Outputs: Empty**
-    * TrainInterrupt:
+    * **TrainInterrupt**:
         An edge should stop and cleanup current local train due to timeout. After response this message, another `LocalTrain` message would be sent to the edge successively.
+        **Message Inputs: Empty**
+        **Message Outputs: Empty**
+    * **TrainFinish**:
+        A FL was finished at receiving this message. Edge should cleanup and gracefully stop the service
         **Message Inputs: Empty**
         **Message Outputs: Empty**
 
 * Message from `Application`
-    * LocalTrainFinish:
+    * **LocalTrainFinish**:
     This action is sent without payload after user finishes local train.
         **Message Inputs: LocalTrainResult**
         ```protobuf
@@ -328,4 +332,8 @@ gRPC protocol:
             }
         }
         ```
+        **Message Outputs: Empty**
+    * **TrainFinish**:
+        A FL was finished at receiving this message. Edge should cleanup and gracefully stop the service
+        **Message Inputs: Empty**
         **Message Outputs: Empty**

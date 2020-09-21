@@ -48,3 +48,15 @@ func sendAggregateMessage(appGrpcServerURI string, localModels []localModel, agg
 		},
 	)
 }
+
+func sendTrainFinishMessage(appGrpcServerURI string) {
+	util.EmitEvent(
+		appGrpcServerURI,
+		func(conn *grpc.ClientConn) interface{} {
+			return protos.NewAggregateServerAppClient(conn)
+		},
+		func(ctx context.Context, client interface{}) (interface{}, error) {
+			return client.(protos.AggregateServerAppClient).TrainFinish(ctx, &protos.Empty{})
+		},
+	)
+}

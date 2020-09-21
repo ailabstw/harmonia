@@ -178,20 +178,14 @@ var StateTransit = util.StateTransit{
 				}
 			}
 
-			if localTrainState.roundCount + 1 == localTrainState.trainPlan.RoundCount {
-				return idleState{}, []func() {
-					pushModel,
-				}
-			} else {
-				if (util.TrainPlan{}) == localTrainState.trainPlan {
-					zap.L().Warn("train plan is empty")
-				}
-				return aggregateState{
-					roundCount: localTrainState.roundCount + 1,
-					trainPlan:   localTrainState.trainPlan,
-				}, []func() {
-					pushModel,
-				}
+			if (util.TrainPlan{}) == localTrainState.trainPlan {
+				zap.L().Warn("train plan is empty")
+			}
+			return aggregateState {
+				roundCount: localTrainState.roundCount + 1,
+				trainPlan: localTrainState.trainPlan,
+			}, []func() {
+				pushModel,
 			}
 		},
 		reflect.TypeOf(&baseModelReceivedAction{}): func(state util.State, action util.Action, operator util.AbstractOperator) (util.State, []func()) {
@@ -272,16 +266,28 @@ var StateTransit = util.StateTransit{
 			if baseModelReceivedAction.ref != fmt.Sprintf("refs/heads/%s", util.TrainBranch(aggregateState.trainPlan.Name, aggregateState.trainPlan.CommitID)) {
 				return state, nil
 			}
-			return localTrainState{
-				roundCount: aggregateState.roundCount,
-				trainPlan: aggregateState.trainPlan,
-			}, []func() {
-				pullBaseModelAndLocalTrain(
-					operator.GetPayload().(Payload).GrpcServerURI,
-					operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL,
-					operator.GetPayload().(Payload).EdgeModelRepoGitHttpURL,
-					aggregateState.trainPlan.EpochCount,
-				),
+			if aggregateState.roundCount == aggregateState.trainPlan.RoundCount {
+				return idleState{}, []func() {
+					func() {
+						util.PullData(operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL)
+						sendTrainFinishMessage(
+							operator.GetPayload().(Payload).GrpcServerURI,
+						)
+						operator.TrainFinish()
+					},
+				}
+			} else {
+				return localTrainState {
+					roundCount: aggregateState.roundCount,
+					trainPlan: aggregateState.trainPlan,
+				}, []func() {
+					pullBaseModelAndLocalTrain(
+						operator.GetPayload().(Payload).GrpcServerURI,
+						operator.GetPayload().(Payload).AggregatedModelRepoGitHttpURL,
+						operator.GetPayload().(Payload).EdgeModelRepoGitHttpURL,
+						aggregateState.trainPlan.EpochCount,
+					),
+				}
 			}
 		},
 	},

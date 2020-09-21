@@ -28,6 +28,7 @@ type Operator struct {
 	grpcServerRegister util.GrpcServerRegisterFunc
 	payload interface{}
 	stateMux *sync.Mutex
+	trainFinish func()
 }
 
 func httpRequestToWebhook(req *http.Request) (*util.Webhook, error) {
@@ -145,12 +146,17 @@ func (operator *Operator) GetPayload() interface{} {
 	return operator.payload
 }
 
+func (operator *Operator) TrainFinish() {
+	operator.trainFinish()
+}
+
 func newAggregateServerOperator(
 	appGrpcServerURI string,
 	trainPlanRepoGitHttpURL string,
 	aggregatedModelRepoGitHttpURL string,
 	_ string,
 	edgeModelRepoGitHttpURLs []string,
+	trainFinish func(),
 ) *Operator {
 	return &Operator {
 		aggregateServer.InitState,
@@ -165,6 +171,7 @@ func newAggregateServerOperator(
 			EdgeModelRepoGitHttpURLs: edgeModelRepoGitHttpURLs,
 		},
 		&sync.Mutex{},
+		trainFinish,
 	}
 }
 
@@ -174,6 +181,7 @@ func newEdgeOperator(
 	aggregatedModelRepoGitHttpURL string,
 	edgeModelRepoGitHttpURL string,
 	_ []string,
+	trainFinish func(),
 ) *Operator {
 	return &Operator {
 		edge.InitState,
@@ -188,6 +196,7 @@ func newEdgeOperator(
 			EdgeModelRepoGitHttpURL: edgeModelRepoGitHttpURL,
 		},
 		&sync.Mutex{},
+		trainFinish,
 	}
 }
 
@@ -197,6 +206,7 @@ var NewOperator = map[string] func(
 	aggregatedModelRepoGitHttpURL string,
 	edgeModelRepoGitHttpURL string,
 	edgeModelRepoGitHttpURLs []string,
+	trainFinish func(),
 ) *Operator {
 	"aggregator": newAggregateServerOperator,
 	"edge": newEdgeOperator,

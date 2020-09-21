@@ -12,6 +12,7 @@ service EdgeApp {
   rpc LocalTrain(LocalTrainParams) returns (Empty) {}
   rpc TrainInit(Empty) returns (Empty) {}
   rpc TrainInterrupt(Empty) returns (Empty) {}
+  rpc TrainFinish(Empty) returns (Empty) {}
 }
 
 service AggregateServerOperator {
@@ -20,6 +21,7 @@ service AggregateServerOperator {
 
 service AggregateServerApp {
   rpc Aggregate(AggregateParams) returns (Empty) {}
+  rpc TrainFinish(Empty) returns (Empty) {}
 }
 
 message Empty {}
